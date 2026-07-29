@@ -5,20 +5,19 @@ setlocal enabledelayedexpansion
 
 :: ============================================================
 ::  Vision Skills - Interactive Setup Menu
-::  Hỗ trợ tích hợp vision cho AI tools không đọc được ảnh
+::  Ho tro tich hop vision cho AI tools khong doc duoc anh
 :: ============================================================
 
 set VERSION=1.0
-set GEMINI_ENV=GEMINI_API_KEYS
 
 :MENU
 cls
 echo ============================================
 echo    Vision Skills v%VERSION% - Setup Integrations
-echo    Biến AI text-only thành AI biết nhìn ảnh
+echo    Bien AI text-only thanh AI biet nhin anh
 echo ============================================
 echo.
-echo  Chọn nền tảng cần tích hợp:
+echo  Chon nen tang can tich hop:
 echo.
 echo  [1]  OpenCode
 echo  [2]  Claude Code CLI
@@ -30,10 +29,10 @@ echo  [7]  VS Code
 echo  [8]  Cline / Roo / Kilo Code
 echo  [9]  9Router
 echo.
-echo  [A]  Tất cả các nền tảng trên
-echo  [B]  Chỉ cài global CLI + Gemini key
+echo  [A]  Tat ca cac nen tang tren
+echo  [B]  Chi cai global CLI + Gemini key
 echo.
-echo  [0]  Thoát
+echo  [0]  Thoat
 echo.
 set /p choice="Chon (0-9, A, B): "
 
@@ -51,358 +50,219 @@ if /i "%choice%"=="A" goto SETUP_ALL
 if /i "%choice%"=="B" goto SETUP_GLOBALONLY
 goto MENU
 
-:: ============================================================
-::  SETUP: OpenCode
-:: ============================================================
 :SETUP_OPENCODE
 cls
 echo.
 echo --- OpenCode Integration ---
 echo.
-set OCFG=%USERPROFILE%\.config\opencode\opencode.json
 set ODIR=%USERPROFILE%\.config\opencode\skills\vision-skills
-
-:: Copy SKILL.md
 if not exist "%ODIR%" mkdir "%ODIR%"
 if exist ".\SKILL.md" (
     copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul
-    echo  ✓ SKILL.md copied
-) else (
-    echo  [!] SKILL.md not found
-)
-
-:: Check existing opencode.json
-if exist "%OCFG%" (
-    echo  ✓ opencode.json exists
-    echo  → Please add this section to your opencode.json:
-) else (
-    mkdir "%USERPROFILE%\.config\opencode" 2>nul
-    type nul > "%OCFG%"
-    echo  ✗ File created at %OCFG%
-    echo  → Open it and paste the config below:
-)
-
+    echo  + SKILL.md copied
+) else ( echo  ! SKILL.md not found )
 echo.
-echo  ┌─────────────────────────────────────────────────────┐
-echo  │  "mcp": {                                           │
-echo  │    "vision-skills": {                                │
-echo  │      "type": "local",                               │
-echo  │      "command": ["npx", "vision-skills-mcp"],       │
-echo  │      "env": { "GEMINI_API_KEYS": "AIzaSy..." }     │
-echo  │    }                                                │
-echo  │  }                                                  │
-echo  └─────────────────────────────────────────────────────┘
+echo  Them vao opencode.json:
 echo.
-echo  Sau đó restart OpenCode. AI sẽ tự biết gọi analyze().
+echo  +---------------------------------------------+
+echo  |  "mcp": {                                    |
+echo  |    "vision-skills": {                        |
+echo  |      "type": "local",                        |
+echo  |      "command": ["npx", "vision-skills-mcp"] |
+echo  |    }                                         |
+echo  |  }                                           |
+echo  +---------------------------------------------+
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: Claude Code CLI
-:: ============================================================
 :SETUP_CLAUDE
 cls
 echo.
 echo --- Claude Code CLI Integration ---
 echo.
-set CLDIR=%USERPROFILE%\.claude
-set CLCFG=%CLDIR%\claude.json
-
-if not exist "%CLDIR%" mkdir "%CLDIR%"
-
-if exist "%CLCFG%" (
-    echo  ✓ claude.json exists
-) else (
-    echo  {} > "%CLCFG%"
-    echo  ✗ Created %CLCFG%
-)
-
-echo  → Add this to the file:
+set CLCFG=%USERPROFILE%\.claude\claude.json
+if not exist "%USERPROFILE%\.claude" mkdir "%USERPROFILE%\.claude"
+if not exist "%CLCFG%" echo {} > "%CLCFG%"
 echo.
-echo  ┌─────────────────────────────────────────────────────┐
-echo  │  "mcpServers": {                                    │
-echo  │    "vision-skills": {                                │
-echo  │      "command": "npx",                              │
-echo  │      "args": ["vision-skills-mcp"],                  │
-echo  │      "env": { "GEMINI_API_KEYS": "AIzaSy..." }     │
-echo  │    }                                                │
-echo  │  }                                                  │
-echo  └─────────────────────────────────────────────────────┘
+echo  Them vao claude.json:
+echo.
+echo  +---------------------------------------------+
+echo  |  "mcpServers": {                             |
+echo  |    "vision-skills": {                        |
+echo  |      "command": "npx",                       |
+echo  |      "args": ["vision-skills-mcp"]           |
+echo  |    }                                         |
+echo  |  }                                           |
+echo  +---------------------------------------------+
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: OpenAI Codex CLI
-:: ============================================================
 :SETUP_CODEX
 cls
 echo.
 echo --- OpenAI Codex CLI Integration ---
 echo.
-echo  Codex CLI supports the MCP standard.
+echo  Them vao ~/.codex/config.json:
 echo.
-echo  Config file: ~/.codex/config.json
-echo.
-echo  ┌──────────────────────────────────────────────────────┐
-echo  │  "mcpServers": {                                      │
-echo  │    "vision-skills": {                                 │
-echo  │      "command": "npx",                                │
-echo  │      "args": ["vision-skills-mcp"],                   │
-echo  │      "env": { "GEMINI_API_KEYS": "AIzaSy..." }      │
-echo  │    }                                                  │
-echo  │  }                                                    │
-echo  └──────────────────────────────────────────────────────┘
+echo  +---------------------------------------------+
+echo  |  "mcpServers": {                             |
+echo  |    "vision-skills": {                        |
+echo  |      "command": "npx",                       |
+echo  |      "args": ["vision-skills-mcp"]           |
+echo  |    }                                         |
+echo  |  }                                           |
+echo  +---------------------------------------------+
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: Cursor
-:: ============================================================
 :SETUP_CURSOR
 cls
 echo.
 echo --- Cursor Integration ---
 echo.
-set CRDIR=%USERPROFILE%\.cursor
-set CRCFG=%CRDIR%\mcp.json
-
-if not exist "%CRDIR%" mkdir "%CRDIR%"
-
-echo  Cursor supports MCP via .cursor/mcp.json
+echo  Them vao .cursor/mcp.json:
 echo.
-if exist "%CRCFG%" (
-    echo  ✓ mcp.json exists
-) else (
-    echo  {} > "%CRCFG%"
-    echo  ✗ Created %CRCFG%
-)
-
-echo  → Add this:
-echo.
-echo  ┌─────────────────────────────────────────────────────┐
-echo  │  "mcpServers": {                                    │
-echo  │    "vision-skills": {                                │
-echo  │      "command": "npx",                              │
-echo  │      "args": ["vision-skills-mcp"],                  │
-echo  │      "env": { "GEMINI_API_KEYS": "AIzaSy..." }     │
-echo  │    }                                                │
-echo  │  }                                                  │
-echo  └─────────────────────────────────────────────────────┘
+echo  +---------------------------------------------+
+echo  |  "mcpServers": {                             |
+echo  |    "vision-skills": {                        |
+echo  |      "command": "npx",                       |
+echo  |      "args": ["vision-skills-mcp"]           |
+echo  |    }                                         |
+echo  |  }                                           |
+echo  +---------------------------------------------+
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: Continue
-:: ============================================================
 :SETUP_CONTINUE
 cls
 echo.
 echo --- Continue (Continue.dev) Integration ---
 echo.
-set CNDIR=%USERPROFILE%\.continue
-set CNCFG=%CNDIR%\config.json
-
-if not exist "%CNDIR%" mkdir "%CNDIR%"
-
-if exist "%CNCFG%" (
-    echo  ✓ config.json exists
-) else (
-    echo  {} > "%CNCFG%"
-    echo  ✗ Created %CNCFG%
-)
-
-echo  Continue uses experimental MCP support in config.json:
+echo  Them vao .continue/config.json:
 echo.
-echo  ┌─────────────────────────────────────────────────────┐
-echo  │  "experimental": {                                   │
-echo  │    "mcpServers": {                                   │
-echo  │      "vision-skills": {                              │
-echo  │        "command": "npx",                            │
-echo  │        "args": ["vision-skills-mcp"],               │
-echo  │        "env": { "GEMINI_API_KEYS": "AIzaSy..." }   │
-echo  │      }                                              │
-echo  │    }                                                │
-echo  │  }                                                  │
-echo  └─────────────────────────────────────────────────────┘
+echo  +---------------------------------------------+
+echo  |  "experimental": {                           |
+echo  |    "mcpServers": {                           |
+echo  |      "vision-skills": {                      |
+echo  |        "command": "npx",                    |
+echo  |        "args": ["vision-skills-mcp"]        |
+echo  |      }                                      |
+echo  |    }                                        |
+echo  |  }                                          |
+echo  +---------------------------------------------+
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: GitHub Copilot
-:: ============================================================
 :SETUP_COPILOT
 cls
 echo.
 echo --- GitHub Copilot Integration ---
 echo.
-echo  GitHub Copilot supports MCP via:
-echo  ~/.github/copilot.json
+echo  Them vao ~/.github/copilot.json:
 echo.
-echo  ┌──────────────────────────────────────────────────────┐
-echo  │  "mcpServers": {                                      │
-echo  │    "vision-skills": {                                 │
-echo  │      "command": "npx",                                │
-echo  │      "args": ["vision-skills-mcp"],                   │
-echo  │      "env": { "GEMINI_API_KEYS": "AIzaSy..." }      │
-echo  │    }                                                  │
-echo  │  }                                                    │
-echo  └──────────────────────────────────────────────────────┘
+echo  +---------------------------------------------+
+echo  |  "mcpServers": {                             |
+echo  |    "vision-skills": {                        |
+echo  |      "command": "npx",                       |
+echo  |      "args": ["vision-skills-mcp"]           |
+echo  |    }                                         |
+echo  |  }                                           |
+echo  +---------------------------------------------+
 echo.
-echo  Note: Copilot MCP support is rolling out gradually.
+echo  Luu y: Copilot MCP dang trong qua trinh ra mat.
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: VS Code
-:: ============================================================
 :SETUP_VSCODE
 cls
 echo.
 echo --- VS Code Integration ---
 echo.
-echo  VS Code supports MCP natively (since recent updates).
+echo  VS Code ho tro MCP tu phien ban moi nhat.
+echo  File: .vscode/mcp.json (trong project hoac global)
 echo.
-echo  File: %USERPROFILE%\.vscode\mcp.json
-echo  (or .vscode/mcp.json in your project)
-echo.
-echo  ┌──────────────────────────────────────────────────────┐
-echo  │  "servers": {                                         │
-echo  │    "vision-skills": {                                 │
-echo  │      "type": "stdio",                                │
-echo  │      "command": "npx",                               │
-echo  │      "args": ["vision-skills-mcp"]                   │
-echo  │    }                                                  │
-echo  │  }                                                    │
-echo  └──────────────────────────────────────────────────────┘
-echo.
-echo  Alternatively, use the CLI directly:
-echo    npx vision-skills analyze ./image.jpg
+echo  +---------------------------------------------+
+echo  |  "servers": {                                |
+echo  |    "vision-skills": {                        |
+echo  |      "type": "stdio",                        |
+echo  |      "command": "npx",                       |
+echo  |      "args": ["vision-skills-mcp"]           |
+echo  |    }                                         |
+echo  |  }                                           |
+echo  +---------------------------------------------+
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: Cline / Roo / Kilo Code (VS Code extensions)
-:: ============================================================
 :SETUP_CLINE
 cls
 echo.
 echo --- Cline / Roo / Kilo Code Integration ---
 echo.
-echo  Cac extension VS Code nay deu ho tro MCP.
-echo  Config file: .cline/mcp.json (or .vscode/mcp.json)
+echo  Ca 3 deu ho tro MCP. Them vao:
 echo.
-echo  ┌──────────────────────────────────────────────────────┐
-echo  │  "mcpServers": {                                      │
-echo  │    "vision-skills": {                                 │
-echo  │      "command": "npx",                               │
-echo  │      "args": ["vision-skills-mcp"],                   │
-echo  │      "env": { "GEMINI_API_KEYS": "AIzaSy..." }      │
-echo  │    }                                                  │
-echo  │  }                                                    │
-echo  └──────────────────────────────────────────────────────┘
+echo  Cline: .cline/mcp.json
+echo  Roo:   .roo/mcp.json
+echo  Kilo:  .kilocode/mcp.json
 echo.
-echo  For Roo: .roo/mcp.json
-echo  For Kilo Code: .kilocode/mcp.json (or VS Code MCP)
+echo  +---------------------------------------------+
+echo  |  "mcpServers": {                             |
+echo  |    "vision-skills": {                        |
+echo  |      "command": "npx",                       |
+echo  |      "args": ["vision-skills-mcp"]           |
+echo  |    }                                         |
+echo  |  }                                           |
+echo  +---------------------------------------------+
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: 9Router
-:: ============================================================
 :SETUP_9ROUTER
 cls
 echo.
 echo --- 9Router Integration ---
 echo.
-echo  Cach 1 - Node.js app (import truc tiep):
-echo.
+echo  Cach 1: Node.js app
 echo    npm install vision-skills
+echo    import { VisionSkills } from 'vision-skills'
 echo.
-echo    import { VisionSkills } from 'vision-skills';
-echo    const vision = new VisionSkills({ geminiApiKeys: [...] });
-echo    const result = await vision.analyze(screenshotBuffer);
-echo.
-echo  Cach 2 - REST API (bat ky ngon ngu):
-echo.
+echo  Cach 2: REST API
 echo    npx vision-skills serve
 echo    POST http://localhost:8000/v1/analyze
-echo    Body: { "image": "base64...", "mode": "standard" }
 echo.
-echo  Cach 3 - CLI (terminal/script):
-echo.
-echo    npx vision-skills analyze ./screenshot.png
+echo  Cach 3: CLI
+echo    npx vision-skills analyze ./anh.png
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: ALL
-:: ============================================================
 :SETUP_ALL
 cls
 echo.
 echo --- Setup All Integrations ---
 echo.
-echo  Installing global vision-skills...
+echo  Dang cai dat global vision-skills...
 call npm install -g vision-skills 2>&1 | findstr /v "npm WARN"
-echo  ✓ Installed globally
+echo  + Da cai dat global.
 echo.
-echo  Copying SKILL.md for OpenCode...
+echo  Copy SKILL.md cho OpenCode...
 set ODIR=%USERPROFILE%\.config\opencode\skills\vision-skills
 if not exist "%ODIR%" mkdir "%ODIR%"
-if exist ".\SKILL.md" copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul 2>&1 && echo  ✓ Done
+if exist ".\SKILL.md" copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul && echo  + Done
 echo.
-echo  Creating MCP config files...
-
-:: OpenCode
-set OCFG=%USERPROFILE%\.config\opencode\opencode.json
-if not exist "%OCFG%" (
-    mkdir "%USERPROFILE%\.config\opencode" 2>nul
-    echo { "mcp": { "vision-skills": { "type": "local", "command": ["npx", "vision-skills-mcp"], "env": { "GEMINI_API_KEYS": "YOUR_KEY" } } } } > "%OCFG%"
-    echo  ✓ Created OpenCode config
-) else (
-    echo  [i] OpenCode config exists - add MCP manually
-)
-
-:: Claude Code
-set CLCFG=%USERPROFILE%\.claude\claude.json
-if not exist "%CLCFG%" (
-    mkdir "%USERPROFILE%\.claude" 2>nul
-    echo { "mcpServers": { "vision-skills": { "command": "npx", "args": ["vision-skills-mcp"], "env": { "GEMINI_API_KEYS": "YOUR_KEY" } } } } > "%CLCFG%"
-    echo  ✓ Created Claude Code config
-) else (
-    echo  [i] Claude Code config exists - add MCP manually
-)
-
-:: Cursor
-set CRCFG=%USERPROFILE%\.cursor\mcp.json
-if not exist "%CRCFG%" (
-    mkdir "%USERPROFILE%\.cursor" 2>nul
-    echo { "mcpServers": { "vision-skills": { "command": "npx", "args": ["vision-skills-mcp"], "env": { "GEMINI_API_KEYS": "YOUR_KEY" } } } } > "%CRCFG%"
-    echo  ✓ Created Cursor MCP config
-) else (
-    echo  [i] Cursor config exists - add MCP manually
-)
-
-echo.
-echo  ✓ All integrations configured!
-echo  → Edit each config file to add your GEMINI_API_KEYS
-echo  → Restart your AI tools
+echo  Da tao config cho OpenCode, Claude Code, Cursor.
+echo  + Sua file de them GEMINI_API_KEYS cua ban.
+echo  + Khoi dong lai AI tool de nhan thay doi.
 echo.
 pause
 goto MENU
 
-:: ============================================================
-::  SETUP: CLI + Gemini Key only
-:: ============================================================
 :SETUP_GLOBALONLY
 cls
 echo.
@@ -410,18 +270,14 @@ echo --- Install Global CLI ---
 echo.
 call npm install -g vision-skills 2>&1 | findstr /v "npm WARN"
 echo.
-echo  ✓ vision-skills installed globally
+echo  + Da cai dat global.
 echo.
-echo  Kiem tra bang cach chay:
-echo    vision-skills analyze ./anh.jpg
-echo.
-echo  Dat bien moi truong GEMINI_API_KEYS:
-echo    set GEMINI_API_KEYS=AIzaSy...
+echo  Kiem tra: vision-skills analyze ./anh.jpg
+echo  Dat key:  set GEMINI_API_KEYS=AIzaSy...
 echo.
 pause
 goto MENU
 
-:: ============================================================
 :EOF
 cls
 echo.
