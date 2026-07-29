@@ -5,9 +5,11 @@ Turn images into **structured JSON** for AI models that can't read images (or re
 Give a text-only LLM (or a weak-vision model) a rich, structured description of any image: detected objects, OCR text, UI elements, spatial relationships, semantic relationships, and reasoning — all in one consistent JSON schema.
 
 > **Status: early (0.1.0).** Core pipeline and providers are implemented,
-> unit-tested (44 tests), and verified end-to-end against the live Gemini API
-> (OCR incl. Vietnamese, object detection with bounding boxes). Still early —
-> see [Limitations](#limitations) before production use.
+> unit-tested (61 tests), and verified end-to-end against the live Gemini API
+> on real screenshots: OCR (incl. Vietnamese), object detection with bounding
+> boxes, table extraction (rows/columns), text styling (color/emphasis), scene
+> graph, semantic relationships, and reasoning. Still early — see
+> [Limitations](#limitations) before production use.
 
 ## Install
 
@@ -56,8 +58,8 @@ Or via env (comma-separated): `GEMINI_API_KEYS=key1,key2,key3`.
 
 For large/dense images (dashboards, documents packed with small text), enable
 deep analysis. It tiles the image, reads each region thoroughly, and merges —
-catching small text a single pass misses. Costs more API calls per image, so
-it's opt-in:
+catching small text a single pass misses (tested: ~41-95 blocks → ~140-210
+blocks on a real dashboard). Costs more API calls per image so it's opt-in:
 
 ```ts
 const vision = new VisionSkills({
@@ -107,13 +109,21 @@ If you don't pass a `mode`, the image classifier picks one automatically.
   "modeUsed": "standard",
   "entities": [
     { "entityId": "e1", "label": "text_block", "bbox": [120,340,180,370],
-      "confidence": 0.98, "text": "Login", "sourcePlugins": ["google_vision_ocr"] }
+      "confidence": 0.98, "text": "Login",
+      "metadata": { "language": "en", "color": "#ffffff", "emphasis": "heading" },
+      "sourcePlugins": ["gemini_ocr"] }
   ],
+  "tables": [
+    { "title": "RECENT REQUESTS", "columns": ["Model","In/Out","When"],
+      "rows": [["claude-opus","574↑ 140↓","8s ago"]] }
+  ],
+  "code": { "language": "python", "functions": ["render_video"],
+            "errors": ["TypeError: ..."], "snippet": "def render_video():" },
   "sceneGraph": {
     "spatial": [{ "subjectId": "e1", "relation": "above", "objectId": "e2", "confidence": 1 }],
     "semantic": []
   },
-  "reasonerOutput": null,
+  "reasonerOutput": { "summary": "Login page", "actionHints": [...], "anomalies": [...] },
   "providerResults": [ /* per-provider details */ ],
   "costActualTotal": 0.003,
   "latencyMsTotal": 210.5
@@ -178,7 +188,7 @@ new VisionSkills({
   googleCloudVisionKey: '...', // optional paid
   anthropicApiKey: '...',      // optional paid
   vlmProvider: 'gemini',       // 'gemini' (free) | 'claude'
-  geminiModel: 'gemini-2.0-flash',
+  geminiModel: 'gemini-flash-lite-latest',
   defaultMode: 'standard',
   enableSemanticRelationships: true,
   enableReasoner: true,
@@ -219,9 +229,11 @@ This is an early release. Be aware of the following before relying on it:
   and Claude parsing are covered by fixture-based unit tests but have not been
   validated against their live APIs — test with a real key before relying on
   them.
-- **Gemini free tier is rate-limited.** Expect `429` under load; the client
-  retries with backoff, but for volume you may need a paid tier or a fallback
-  provider. Note `gemini-2.5-flash` is slower (reasoning) — 10-20s per call.
+- **Gemini free tier is rate-limited.** Expect `429` under load; the built-in
+  key pool rotates across multiple keys, but for volume you may need a paid
+  tier or a fallback provider. `gemini-flash-lite-latest` is the default
+  (fast, ~4-8s per call) — switch to `gemini-2.5-flash` for deeper reasoning
+  (slower, lower free quota).
 - **Classifier is heuristic.** Image-type classification uses simple image
   statistics, not a trained model. A CLIP-based layer is planned.
 - **Segmentation / face / pose are not implemented.** `advanced` mode
