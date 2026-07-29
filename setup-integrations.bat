@@ -10,11 +10,49 @@ setlocal enabledelayedexpansion
 
 set VERSION=1.0
 
-:MENU
+:GETKEY
 cls
 echo ============================================
 echo    Vision Skills v%VERSION% - Setup Integrations
 echo    Bien AI text-only thanh AI biet nhin anh
+echo ============================================
+echo.
+echo  Ban can 1 Gemini API key (free, khong can the tin dung)
+echo  Lay key tai: https://aistudio.google.com/apikey
+echo.
+set /p GEMINI_KEY="Nhap Gemini API key cua ban: "
+
+if "%GEMINI_KEY%"=="" (
+    echo.
+    echo  [!] Vui long nhap key de tiep tuc.
+    echo  Neu khong co key, lay mien phi tai:
+    echo  https://aistudio.google.com/apikey
+    echo.
+    pause
+    goto GETKEY
+)
+
+:: Kiem tra so bo - key Gemini bat dau bang AIza
+if not "%GEMINI_KEY:~0,4%"=="AIza" (
+    echo.
+    echo  [!] Key khong hop le. Key Gemini thuong bat dau bang AIza...
+    echo.
+    pause
+    goto GETKEY
+)
+
+:: Cai dat global
+cls
+echo.
+echo  Dang cai dat vision-skills global (co the mat vai giay)...
+call npm install -g vision-skills 2>&1 | findstr /v "npm WARN"
+echo  + Da cai dat.
+
+:MENU
+cls
+echo ============================================
+echo    Vision Skills v%VERSION%
+echo    Key: %GEMINI_KEY:~0,12%... (da luu)
 echo ============================================
 echo.
 echo  Chon nen tang can tich hop:
@@ -29,8 +67,8 @@ echo  [7]  VS Code
 echo  [8]  Cline / Roo / Kilo Code
 echo  [9]  9Router
 echo.
-echo  [A]  Tat ca cac nen tang tren
-echo  [B]  Chi cai global CLI + Gemini key
+echo  [A]  Tat ca
+echo  [B]  Chi cai global CLI + set env
 echo.
 echo  [0]  Thoat
 echo.
@@ -47,155 +85,121 @@ if "%choice%"=="7" goto SETUP_VSCODE
 if "%choice%"=="8" goto SETUP_CLINE
 if "%choice%"=="9" goto SETUP_9ROUTER
 if /i "%choice%"=="A" goto SETUP_ALL
-if /i "%choice%"=="B" goto SETUP_GLOBALONLY
+if /i "%choice%"=="B" goto SETUP_ENV
 goto MENU
+
+:MAKE_JSON <file> <content>
+if not exist "%~dp1" mkdir "%~dp1"
+echo %~2 > "%~1"
+echo  + Created %~1
+exit /b 0
 
 :SETUP_OPENCODE
 cls
 echo.
 echo --- OpenCode Integration ---
-echo.
 set ODIR=%USERPROFILE%\.config\opencode\skills\vision-skills
 if not exist "%ODIR%" mkdir "%ODIR%"
 if exist ".\SKILL.md" (
     copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul
     echo  + SKILL.md copied
-) else ( echo  ! SKILL.md not found )
-echo.
-echo  Them vao opencode.json:
-echo.
-echo  +---------------------------------------------+
-echo  |  "mcp": {                                    |
-echo  |    "vision-skills": {                        |
-echo  |      "type": "local",                        |
-echo  |      "command": ["npx", "vision-skills-mcp"] |
-echo  |    }                                         |
-echo  |  }                                           |
-echo  +---------------------------------------------+
-echo.
+)
+set CFG=%USERPROFILE%\.config\opencode\opencode.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcp\": { \"vision-skills\": { \"type\": \"local\", \"command\": [\"npx\", \"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+) else (
+    echo  + File exists. Them MCP config thu cong.
+)
+echo  + Done!
 pause
 goto MENU
 
 :SETUP_CLAUDE
 cls
 echo.
-echo --- Claude Code CLI Integration ---
-echo.
-set CLCFG=%USERPROFILE%\.claude\claude.json
-if not exist "%USERPROFILE%\.claude" mkdir "%USERPROFILE%\.claude"
-if not exist "%CLCFG%" echo {} > "%CLCFG%"
-echo.
-echo  Them vao claude.json:
-echo.
-echo  +---------------------------------------------+
-echo  |  "mcpServers": {                             |
-echo  |    "vision-skills": {                        |
-echo  |      "command": "npx",                       |
-echo  |      "args": ["vision-skills-mcp"]           |
-echo  |    }                                         |
-echo  |  }                                           |
-echo  +---------------------------------------------+
-echo.
+echo --- Claude Code CLI ---
+set CFG=%USERPROFILE%\.claude\claude.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+) else (
+    echo  + File exists. Them MCP thu cong vao %CFG%
+)
+echo  + Done!
 pause
 goto MENU
 
 :SETUP_CODEX
 cls
 echo.
-echo --- OpenAI Codex CLI Integration ---
-echo.
-echo  Them vao ~/.codex/config.json:
-echo.
-echo  +---------------------------------------------+
-echo  |  "mcpServers": {                             |
-echo  |    "vision-skills": {                        |
-echo  |      "command": "npx",                       |
-echo  |      "args": ["vision-skills-mcp"]           |
-echo  |    }                                         |
-echo  |  }                                           |
-echo  +---------------------------------------------+
-echo.
+echo --- OpenAI Codex CLI ---
+set CFG=%USERPROFILE%\.codex\config.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+) else (
+    echo  + File exists. Them MCP thu cong.
+)
+echo  + Done!
 pause
 goto MENU
 
 :SETUP_CURSOR
 cls
 echo.
-echo --- Cursor Integration ---
-echo.
-echo  Them vao .cursor/mcp.json:
-echo.
-echo  +---------------------------------------------+
-echo  |  "mcpServers": {                             |
-echo  |    "vision-skills": {                        |
-echo  |      "command": "npx",                       |
-echo  |      "args": ["vision-skills-mcp"]           |
-echo  |    }                                         |
-echo  |  }                                           |
-echo  +---------------------------------------------+
-echo.
+echo --- Cursor ---
+set CFG=%USERPROFILE%\.cursor\mcp.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+) else (
+    echo  + File exists. Them MCP thu cong.
+)
+echo  + Done!
 pause
 goto MENU
 
 :SETUP_CONTINUE
 cls
 echo.
-echo --- Continue (Continue.dev) Integration ---
-echo.
-echo  Them vao .continue/config.json:
-echo.
-echo  +---------------------------------------------+
-echo  |  "experimental": {                           |
-echo  |    "mcpServers": {                           |
-echo  |      "vision-skills": {                      |
-echo  |        "command": "npx",                    |
-echo  |        "args": ["vision-skills-mcp"]        |
-echo  |      }                                      |
-echo  |    }                                        |
-echo  |  }                                          |
-echo  +---------------------------------------------+
-echo.
+echo --- Continue (Continue.dev) ---
+set CFG=%USERPROFILE%\.continue\config.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"experimental\": { \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } } }"
+) else (
+    echo  + File exists. Them MCP thu cong.
+)
+echo  + Done!
 pause
 goto MENU
 
 :SETUP_COPILOT
 cls
 echo.
-echo --- GitHub Copilot Integration ---
-echo.
-echo  Them vao ~/.github/copilot.json:
-echo.
-echo  +---------------------------------------------+
-echo  |  "mcpServers": {                             |
-echo  |    "vision-skills": {                        |
-echo  |      "command": "npx",                       |
-echo  |      "args": ["vision-skills-mcp"]           |
-echo  |    }                                         |
-echo  |  }                                           |
-echo  +---------------------------------------------+
-echo.
-echo  Luu y: Copilot MCP dang trong qua trinh ra mat.
-echo.
+echo --- GitHub Copilot ---
+set CFG=%USERPROFILE%\.github\copilot.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+) else (
+    echo  + File exists.
+)
+echo  + Done!
 pause
 goto MENU
 
 :SETUP_VSCODE
 cls
 echo.
-echo --- VS Code Integration ---
+echo --- VS Code ---
+echo  VS Code ho tro MCP. Them vao .vscode/mcp.json:
 echo.
-echo  VS Code ho tro MCP tu phien ban moi nhat.
-echo  File: .vscode/mcp.json (trong project hoac global)
-echo.
-echo  +---------------------------------------------+
-echo  |  "servers": {                                |
-echo  |    "vision-skills": {                        |
-echo  |      "type": "stdio",                        |
-echo  |      "command": "npx",                       |
-echo  |      "args": ["vision-skills-mcp"]           |
-echo  |    }                                         |
-echo  |  }                                           |
-echo  +---------------------------------------------+
+echo  +---------------------------------------+
+echo  |  "servers": {                          |
+echo  |    "vision-skills": {                  |
+echo  |      "type": "stdio",                  |
+echo  |      "command": "npx",                 |
+echo  |      "args": ["vision-skills-mcp"]     |
+echo  |    }                                   |
+echo  |  }                                     |
+echo  +---------------------------------------+
+echo  (VS Code doc bien mo truong GEMINI_API_KEYS tu he thong)
 echo.
 pause
 goto MENU
@@ -203,22 +207,18 @@ goto MENU
 :SETUP_CLINE
 cls
 echo.
-echo --- Cline / Roo / Kilo Code Integration ---
+echo --- Cline / Roo / Kilo Code ---
+echo  Them vao file .cline/mcp.json, .roo/mcp.json, .kilocode/mcp.json:
 echo.
-echo  Ca 3 deu ho tro MCP. Them vao:
-echo.
-echo  Cline: .cline/mcp.json
-echo  Roo:   .roo/mcp.json
-echo  Kilo:  .kilocode/mcp.json
-echo.
-echo  +---------------------------------------------+
-echo  |  "mcpServers": {                             |
-echo  |    "vision-skills": {                        |
-echo  |      "command": "npx",                       |
-echo  |      "args": ["vision-skills-mcp"]           |
-echo  |    }                                         |
-echo  |  }                                           |
-echo  +---------------------------------------------+
+echo  +---------------------------------------+
+echo  |  "mcpServers": {                       |
+echo  |    "vision-skills": {                  |
+echo  |      "command": "npx",                 |
+echo  |      "args": ["vision-skills-mcp"]     |
+echo  |    }                                   |
+echo  |  }                                     |
+echo  +---------------------------------------+
+echo  (Cac tool nay doc key tu GEMINI_API_KEYS env)
 echo.
 pause
 goto MENU
@@ -226,18 +226,17 @@ goto MENU
 :SETUP_9ROUTER
 cls
 echo.
-echo --- 9Router Integration ---
-echo.
-echo  Cach 1: Node.js app
+echo --- 9Router ---
+echo  Node.js:
 echo    npm install vision-skills
 echo    import { VisionSkills } from 'vision-skills'
+echo    const vision = new VisionSkills({
+echo      geminiApiKeys: ["%GEMINI_KEY:~0,12%..."]
+echo    });
 echo.
-echo  Cach 2: REST API
+echo  REST API:
 echo    npx vision-skills serve
 echo    POST http://localhost:8000/v1/analyze
-echo.
-echo  Cach 3: CLI
-echo    npx vision-skills analyze ./anh.png
 echo.
 pause
 goto MENU
@@ -245,35 +244,43 @@ goto MENU
 :SETUP_ALL
 cls
 echo.
-echo --- Setup All Integrations ---
-echo.
-echo  Dang cai dat global vision-skills...
-call npm install -g vision-skills 2>&1 | findstr /v "npm WARN"
-echo  + Da cai dat global.
-echo.
-echo  Copy SKILL.md cho OpenCode...
+echo --- Setup Tat Ca ---
+:: OpenCode
 set ODIR=%USERPROFILE%\.config\opencode\skills\vision-skills
 if not exist "%ODIR%" mkdir "%ODIR%"
-if exist ".\SKILL.md" copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul && echo  + Done
+if exist ".\SKILL.md" copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul
+set CFG=%USERPROFILE%\.config\opencode\opencode.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcp\": { \"vision-skills\": { \"type\": \"local\", \"command\": [\"npx\", \"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+)
+:: Claude Code
+set CFG=%USERPROFILE%\.claude\claude.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+)
+:: Cursor
+set CFG=%USERPROFILE%\.cursor\mcp.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+)
 echo.
-echo  Da tao config cho OpenCode, Claude Code, Cursor.
-echo  + Sua file de them GEMINI_API_KEYS cua ban.
+echo  + Da cau hinh xong cho OpenCode, Claude Code, Cursor!
+echo  + Key cua ban da duoc dien tu dong vao cac file.
 echo  + Khoi dong lai AI tool de nhan thay doi.
 echo.
 pause
 goto MENU
 
-:SETUP_GLOBALONLY
+:SETUP_ENV
 cls
 echo.
-echo --- Install Global CLI ---
-echo.
-call npm install -g vision-skills 2>&1 | findstr /v "npm WARN"
-echo.
-echo  + Da cai dat global.
+echo --- Set Env + CLI ---
+echo  Dat GEMINI_API_KEYS vao he thong...
+setx GEMINI_API_KEYS "%GEMINI_KEY%" >nul
+echo  + Da luu vao Environment Variables.
+echo  + Mo terminal MOI de nhan thay doi.
 echo.
 echo  Kiem tra: vision-skills analyze ./anh.jpg
-echo  Dat key:  set GEMINI_API_KEYS=AIzaSy...
 echo.
 pause
 goto MENU
