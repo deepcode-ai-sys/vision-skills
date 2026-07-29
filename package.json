@@ -47,12 +47,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nhaca/vision-skills.git"
+    "url": "git+https://github.com/ngu-conder/vision-skills.git"
   },
   "bugs": {
-    "url": "https://github.com/nhaca/vision-skills/issues"
+    "url": "https://github.com/ngu-conder/vision-skills/issues"
   },
-  "homepage": "https://github.com/nhaca/vision-skills#readme",
+  "homepage": "https://github.com/ngu-conder/vision-skills#readme",
   "engines": {
     "node": ">=18"
   },

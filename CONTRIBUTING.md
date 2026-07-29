@@ -7,7 +7,7 @@ architecture.
 ## Development setup
 
 ```bash
-git clone https://github.com/nhaca/vision-skills.git
+git clone https://github.com/ngu-conder/vision-skills.git
 cd vision-skills
 npm install
 npm run build
