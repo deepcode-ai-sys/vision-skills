@@ -32,8 +32,15 @@ async function main() {
   const image = await sharp(imgPath).png().toBuffer();
   console.log(`Image: ${imgPath}`);
 
+  const depth = process.env.DEPTH || 'fast';
+  console.log(`analysisDepth: ${depth}`);
+
   // Fresh instance so cache doesn't short-circuit (we WANT real calls).
-  const vision = new VisionSkills({ geminiApiKeys: keys, cacheEnabled: false });
+  const vision = new VisionSkills({
+    geminiApiKeys: keys,
+    cacheEnabled: false,
+    analysisDepth: depth,
+  });
 
   let ok = 0;
   let partial = 0;

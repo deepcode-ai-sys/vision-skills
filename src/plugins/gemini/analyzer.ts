@@ -72,17 +72,23 @@ const VALID_TYPES: ReadonlySet<string> = new Set([
 // garbage-collected automatically when the request finishes.
 const cache = new WeakMap<RequestContext, Promise<CombinedResult>>();
 
+export interface AnalyzeOptions {
+  /** 'deep' also tiles large images for thorough reading. Default 'fast'. */
+  depth?: 'fast' | 'deep';
+}
+
 export async function analyzeCombined(
   keyPool: GeminiKeyPool,
   model: string,
   image: Buffer,
   context: RequestContext,
   timeoutMs: number,
+  options: AnalyzeOptions = {},
 ): Promise<CombinedResult> {
   const existing = cache.get(context);
   if (existing) return existing;
 
-  const promise = doAnalyze(keyPool, model, image, context, timeoutMs);
+  const promise = doAnalyze(keyPool, model, image, context, timeoutMs, options);
   cache.set(context, promise);
   return promise;
 }
@@ -93,6 +99,7 @@ async function doAnalyze(
   image: Buffer,
   context: RequestContext,
   timeoutMs: number,
+  options: AnalyzeOptions,
 ): Promise<CombinedResult> {
   const raw = await callGemini({
     keyPool,
@@ -102,7 +109,16 @@ async function doAnalyze(
     timeoutMs,
     jsonOutput: true,
   });
-  return parseCombined(raw, context.imageWidth, context.imageHeight);
+  const base = parseCombined(raw, context.imageWidth, context.imageHeight);
+
+  // Deep mode: also tile large/dense images and merge, for thorough, stable
+  // reading of small text. Lazy-imported to avoid a cycle.
+  if (options.depth === 'deep') {
+    const { analyzeMultiRegion } = await import('./multi-region.js');
+    return analyzeMultiRegion(keyPool, model, image, context, timeoutMs, base);
+  }
+
+  return base;
 }
 
 export function parseCombined(raw: string, width: number, height: number): CombinedResult {

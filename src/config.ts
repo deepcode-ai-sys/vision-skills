@@ -24,6 +24,13 @@ export interface VisionSkillsConfig {
   defaultMode?: ProcessingMode;
   enableSemanticRelationships?: boolean;
   enableReasoner?: boolean;
+  /**
+   * Analysis depth for reading:
+   * - 'fast': single whole-image pass (cheapest, may miss small text).
+   * - 'deep': also tiles large/dense images for thorough, stable reading
+   *   (more API calls, but consistent results). Default 'fast'.
+   */
+  analysisDepth?: 'fast' | 'deep';
 
   // Image processing
   maxImageSizeMb?: number;
@@ -85,6 +92,7 @@ export function resolveConfig(config: VisionSkillsConfig = {}): ResolvedConfig {
     defaultMode: config.defaultMode ?? 'standard',
     enableSemanticRelationships: config.enableSemanticRelationships ?? true,
     enableReasoner: config.enableReasoner ?? true,
+    analysisDepth: config.analysisDepth ?? 'fast',
     maxImageSizeMb: config.maxImageSizeMb ?? 10,
     maxDimension: config.maxDimension ?? 2048,
     jpegQuality: config.jpegQuality ?? 85,

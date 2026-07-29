@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Deep (multi-region) analysis mode.** Set `analysisDepth: 'deep'` to tile
+  large/dense images, read each tile at higher effective resolution, then
+  merge + dedupe. On a real dashboard this raised text extraction from ~41-95
+  blocks (single pass, unstable) to ~140-210 blocks — catching small text a
+  single downscaled pass misses. Costs more calls (one per tile), so it's
+  opt-in; default stays `'fast'` (single pass).
 - **Structured table extraction.** The analyzer now recognizes tables/lists
   (dashboards, invoices, logs) and extracts them into `tables[]` with title,
   columns, and rows — instead of only scattered text blocks. Verified live on

@@ -25,6 +25,7 @@ export class GeminiDetectionPlugin extends BasePlugin {
   constructor(
     keys: string | string[] | GeminiKeyPool | undefined,
     private model = 'gemini-flash-lite-latest',
+    private depth: 'fast' | 'deep' = 'fast',
   ) {
     super();
     this.keyPool =
@@ -44,6 +45,7 @@ export class GeminiDetectionPlugin extends BasePlugin {
       image,
       context,
       this.perAttemptTimeoutMs,
+      { depth: this.depth },
     );
     const objects = combined.objects;
     const overall =

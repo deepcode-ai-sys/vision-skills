@@ -27,6 +27,7 @@ export class GeminiOCRPlugin extends BasePlugin {
   constructor(
     keys: string | string[] | GeminiKeyPool | undefined,
     private model = 'gemini-flash-lite-latest',
+    private depth: 'fast' | 'deep' = 'fast',
   ) {
     super();
     this.keyPool =
@@ -46,6 +47,7 @@ export class GeminiOCRPlugin extends BasePlugin {
       image,
       context,
       this.perAttemptTimeoutMs,
+      { depth: this.depth },
     );
     const fullText = combined.textBlocks.map((b) => b.text).join('\n');
     return {

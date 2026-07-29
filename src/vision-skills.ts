@@ -266,9 +266,12 @@ export class VisionSkills {
     // Both plugins share ONE key pool so rate-limited keys are skipped
     // consistently across OCR and detection.
     if (this.geminiKeyPool.hasKeys) {
-      this.orchestrator.register(new GeminiOCRPlugin(this.geminiKeyPool, this.config.geminiModel));
+      const depth = this.config.analysisDepth;
       this.orchestrator.register(
-        new GeminiDetectionPlugin(this.geminiKeyPool, this.config.geminiModel),
+        new GeminiOCRPlugin(this.geminiKeyPool, this.config.geminiModel, depth),
+      );
+      this.orchestrator.register(
+        new GeminiDetectionPlugin(this.geminiKeyPool, this.config.geminiModel, depth),
       );
     }
 

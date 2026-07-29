@@ -52,6 +52,20 @@ const vision = new VisionSkills({
 
 Or via env (comma-separated): `GEMINI_API_KEYS=key1,key2,key3`.
 
+### Deep reading for dense images
+
+For large/dense images (dashboards, documents packed with small text), enable
+deep analysis. It tiles the image, reads each region thoroughly, and merges —
+catching small text a single pass misses. Costs more API calls per image, so
+it's opt-in:
+
+```ts
+const vision = new VisionSkills({
+  geminiApiKeys: [...],
+  analysisDepth: 'deep', // default: 'fast' (single pass)
+});
+```
+
 ### No API key at all? Use mock providers
 
 ```ts
