@@ -35,7 +35,8 @@ async function main() {
   console.log('=== Provider health ===');
   console.log(await vision.healthCheck());
 
-  for (const mode of ['basic', 'standard']) {
+  const modes = process.argv[3] ? [process.argv[3]] : ['basic', 'standard'];
+  for (const mode of modes) {
     console.log(`\n=== analyze(mode=${mode}) ===`);
     const start = Date.now();
     const result = await vision.analyze(image, { mode });
@@ -47,6 +48,20 @@ async function main() {
       console.log(`  - ${e.entityId} [${e.label}] bbox=${JSON.stringify(e.bbox.toList())}${t}`);
     }
     console.log(`spatial edges: ${result.sceneGraph.spatial.length}`);
+    console.log(`semantic edges: ${result.sceneGraph.semantic.length}`);
+    for (const s of result.sceneGraph.semantic) {
+      console.log(`  * ${s.subjectId} ${s.relation} ${s.objectId} (${s.confidence})`);
+    }
+    if (result.reasonerOutput) {
+      console.log('reasoner:');
+      console.log(`  summary: ${result.reasonerOutput.summary}`);
+      console.log(`  uiState: ${result.reasonerOutput.uiStateInterpretation}`);
+      console.log(`  actionHints: ${JSON.stringify(result.reasonerOutput.actionHints)}`);
+      console.log(`  anomalies: ${JSON.stringify(result.reasonerOutput.anomalies)}`);
+      console.log(`  confidence: ${result.reasonerOutput.reasoningConfidence}`);
+    } else {
+      console.log('reasoner: (none)');
+    }
     if (result.errors.length) console.log('errors:', result.errors);
     for (const p of result.providerResults) {
       console.log(`  provider ${p.plugin}: errors=${p.errors.length} latency=${Math.round(p.latencyMs)}ms`);

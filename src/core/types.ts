@@ -40,6 +40,7 @@ export const SPATIAL_RELATIONS = [
 ] as const;
 export type SpatialRelation = (typeof SPATIAL_RELATIONS)[number];
 
+// Real-world semantic relations (people, objects, scenes)
 export const SEMANTIC_RELATIONS = [
   'holding',
   'using',
@@ -51,6 +52,36 @@ export const SEMANTIC_RELATIONS = [
   'next_to',
 ] as const;
 export type SemanticRelation = (typeof SEMANTIC_RELATIONS)[number];
+
+// UI/document semantic relations (screens, apps, forms)
+export const UI_RELATIONS = [
+  'contains',
+  'part_of',
+  'labels',
+  'controls',
+  'belongs_to',
+  'submits',
+  'opens',
+  'toggles',
+] as const;
+export type UiRelation = (typeof UI_RELATIONS)[number];
+
+/**
+ * Allowed semantic relations depend on image type:
+ * - real_world -> physical relations (holding, wearing...)
+ * - screen_ui / document -> UI relations (contains, labels, controls...)
+ * - mixed -> both are allowed
+ */
+export function allowedSemanticRelations(imageType: ImageType): ReadonlySet<string> {
+  if (imageType === 'real_world') {
+    return new Set(SEMANTIC_RELATIONS);
+  }
+  if (imageType === 'screen_ui' || imageType === 'document') {
+    return new Set(UI_RELATIONS);
+  }
+  // mixed: allow both
+  return new Set([...SEMANTIC_RELATIONS, ...UI_RELATIONS]);
+}
 
 export const ALLOWED_SEMANTIC_RELATIONS: ReadonlySet<string> = new Set(SEMANTIC_RELATIONS);
 

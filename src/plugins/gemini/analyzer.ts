@@ -13,24 +13,38 @@
 import type { RequestContext } from '../../core/types.js';
 import { callGemini, geminiBoxToPixels, stripFences } from './client.js';
 
+import type { ImageType } from '../../core/types.js';
+
 export interface CombinedResult {
+  imageType: ImageType | null;
   textBlocks: Array<{ text: string; bbox: number[]; confidence: number; language: string | null }>;
   objects: Array<{ label: string; bbox: number[]; confidence: number }>;
 }
 
-const PROMPT = `Analyze this image and extract BOTH text and objects in a single response.
+const PROMPT = `Analyze this image and, in a SINGLE response, classify it and extract text and objects.
 
 Return ONLY a JSON object (no markdown) with this exact shape:
 {
+  "image_type": "real_world | screen_ui | document | mixed",
   "text_blocks": [{"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "language": "vi"}],
   "objects": [{"label": "person", "box_2d": [ymin, xmin, ymax, xmax], "confidence": 0.95}]
 }
 
 Rules:
+- image_type: "screen_ui" for app/website/software screenshots; "document"
+  for scanned/photographed paper or text documents; "real_world" for photos
+  of people/objects/scenes; "mixed" only if genuinely unclear.
 - box_2d values are integers 0-1000 normalized to image dimensions.
 - Preserve original text and diacritics (e.g. Vietnamese).
 - Use concise lowercase object labels.
 - If there is no text, use an empty array. Same for objects.`;
+
+const VALID_TYPES: ReadonlySet<string> = new Set([
+  'real_world',
+  'screen_ui',
+  'document',
+  'mixed',
+]);
 
 // Per-context memoization: WeakMap keyed by the context object so entries are
 // garbage-collected automatically when the request finishes.
@@ -75,8 +89,12 @@ export function parseCombined(raw: string, width: number, height: number): Combi
     const parsed = JSON.parse(stripFences(raw));
     data = typeof parsed === 'object' && parsed !== null ? parsed : {};
   } catch {
-    return { textBlocks: [], objects: [] };
+    return { imageType: null, textBlocks: [], objects: [] };
   }
+
+  const rawType = data.image_type as string | undefined;
+  const imageType =
+    rawType && VALID_TYPES.has(rawType) ? (rawType as ImageType) : null;
 
   const rawTexts = Array.isArray(data.text_blocks) ? data.text_blocks : [];
   const rawObjects = Array.isArray(data.objects) ? data.objects : [];
@@ -100,5 +118,22 @@ export function parseCombined(raw: string, width: number, height: number): Combi
     }))
     .filter((o) => o.label.trim().length > 0);
 
-  return { textBlocks, objects };
+  return { imageType, textBlocks, objects };
+}
+
+/**
+ * Read the Gemini-classified image type from the memoized combined result,
+ * if available. Returns null if the analyzer was never called (e.g. no
+ * Gemini provider) or classification was missing.
+ */
+export async function getGeminiImageType(
+  context: RequestContext,
+): Promise<ImageType | null> {
+  const existing = cache.get(context);
+  if (!existing) return null;
+  try {
+    return (await existing).imageType;
+  } catch {
+    return null;
+  }
 }

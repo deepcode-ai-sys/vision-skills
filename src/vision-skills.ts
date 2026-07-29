@@ -29,6 +29,7 @@ import type { VisionPlugin } from './plugins/base.js';
 import { GeminiOCRPlugin } from './plugins/ocr/gemini.js';
 import { GeminiDetectionPlugin } from './plugins/detection/gemini.js';
 import { GeminiVLMClient } from './plugins/vlm/gemini.js';
+import { getGeminiImageType } from './plugins/gemini/analyzer.js';
 import { GoogleVisionOCRPlugin } from './plugins/ocr/google-vision.js';
 import { GoogleVisionDetectionPlugin } from './plugins/detection/google-vision.js';
 import { RuleBasedUIPlugin } from './plugins/ui/rulebased.js';
@@ -125,6 +126,12 @@ export class VisionSkills {
     // 6. Normalize
     const entities = this.normalizer.normalize(pluginResults);
 
+    // 6b. Refine image type with Gemini's classification (more accurate than
+    // the heuristic). If Gemini ran (it was memoized during provider calls),
+    // prefer its answer for downstream semantic taxonomy + output.
+    const geminiType = await getGeminiImageType(context);
+    const effectiveType = geminiType ?? classification.type;
+
     // 7. Spatial scene graph (all modes)
     const spatialBuilder = new SpatialGraphBuilder(width, height, {
       thresholdX: this.config.spatialThresholdX,
@@ -137,23 +144,29 @@ export class VisionSkills {
     // Assign UI/layout hierarchy (parentId) from containment relationships.
     SpatialGraphBuilder.assignHierarchy(entities);
 
-    // 7b/8. Semantic + reasoner (VLM, Advanced/Full only)
+    // 7b/8. Semantic + reasoner (VLM, Advanced/Full only).
+    // Run them in PARALLEL to cut latency: the reasoner works from spatial
+    // relations + entities and does not strictly need semantic edges first.
     let semanticEdges: SceneGraph['semantic'] = [];
     let reasonerOutput = null;
     if (VLM_MODES.has(mode) && this.vlm) {
-      if (this.config.enableSemanticRelationships) {
-        const semanticBuilder = new SemanticGraphBuilder(this.vlm);
-        semanticEdges = await semanticBuilder.build(buffer, entities);
-      }
-      if (enableReasoner) {
-        const reasoner = new Reasoner(this.vlm);
-        reasonerOutput = await reasoner.reason(
-          buffer,
-          entities,
-          { spatial: spatialEdges, semantic: semanticEdges },
-          classification.type,
-        );
-      }
+      const wantSemantic = this.config.enableSemanticRelationships;
+      const wantReasoner = enableReasoner;
+
+      const semanticPromise = wantSemantic
+        ? new SemanticGraphBuilder(this.vlm).build(buffer, entities, effectiveType)
+        : Promise.resolve([] as SceneGraph['semantic']);
+
+      const reasonerPromise = wantReasoner
+        ? new Reasoner(this.vlm).reason(
+            buffer,
+            entities,
+            { spatial: spatialEdges, semantic: [] },
+            effectiveType,
+          )
+        : Promise.resolve(null);
+
+      [semanticEdges, reasonerOutput] = await Promise.all([semanticPromise, reasonerPromise]);
     }
 
     const sceneGraph: SceneGraph = { spatial: spatialEdges, semantic: semanticEdges };
@@ -169,7 +182,7 @@ export class VisionSkills {
 
     const response: VisionResponse = {
       schemaVersion: SCHEMA_VERSION,
-      imageType: classification.type,
+      imageType: effectiveType,
       modeUsed: mode,
       entities,
       sceneGraph,

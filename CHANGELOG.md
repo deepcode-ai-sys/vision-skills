@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **Semantic relations are now image-type aware.** Real-world images use
+  physical relations (holding, wearing...); UI/document images use UI
+  relations (contains, part_of, labels, controls, submits...). Previously a
+  button was reported as "holding" its label text — now correctly "part_of" /
+  "labels". Verified live.
+- **Classifier accuracy improved** by reusing Gemini's own image-type
+  classification (returned in the same combined call — no extra API cost).
+  A login screenshot that was misclassified as `mixed` is now correctly
+  `screen_ui`. Verified live.
+- **Advanced/Full mode ~2x faster.** Semantic graph and reasoner now run in
+  parallel instead of sequentially (39s -> ~20s on the test image).
 - **Default Gemini model updated** from `gemini-2.0-flash` (returns 429 /
   restricted on current free tier) to `gemini-2.5-flash`, verified working
   end-to-end against the live API.
