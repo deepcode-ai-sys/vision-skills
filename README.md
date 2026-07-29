@@ -4,10 +4,10 @@ Turn images into **structured JSON** for AI models that can't read images (or re
 
 Give a text-only LLM (or a weak-vision model) a rich, structured description of any image: detected objects, OCR text, UI elements, spatial relationships, semantic relationships, and reasoning — all in one consistent JSON schema.
 
-> **Status: early (0.1.0).** Core pipeline and providers are implemented and
-> unit-tested, but provider response parsing is validated with fixtures, not
-> live API calls yet. Verify with a real key before production use. See
-> [Limitations](#limitations).
+> **Status: early (0.1.0).** Core pipeline and providers are implemented,
+> unit-tested (44 tests), and verified end-to-end against the live Gemini API
+> (OCR incl. Vietnamese, object detection with bounding boxes). Still early —
+> see [Limitations](#limitations) before production use.
 
 ## Install
 
@@ -186,9 +186,14 @@ All fields are optional. API keys fall back to `GEMINI_API_KEY`,
 
 This is an early release. Be aware of the following before relying on it:
 
-- **Live API parsing is unverified.** Provider response parsing (Gemini,
-  Google Cloud Vision, Claude) is covered by fixture-based unit tests, but has
-  not been validated end-to-end against live APIs. Test with a real key first.
+- **Gemini verified; other providers not yet.** The Gemini path (OCR +
+  detection) is verified end-to-end against the live API. Google Cloud Vision
+  and Claude parsing are covered by fixture-based unit tests but have not been
+  validated against their live APIs — test with a real key before relying on
+  them.
+- **Gemini free tier is rate-limited.** Expect `429` under load; the client
+  retries with backoff, but for volume you may need a paid tier or a fallback
+  provider. Note `gemini-2.5-flash` is slower (reasoning) — 10-20s per call.
 - **Classifier is heuristic.** Image-type classification uses simple image
   statistics, not a trained model. A CLIP-based layer is planned.
 - **Segmentation / face / pose are not implemented.** `advanced` mode

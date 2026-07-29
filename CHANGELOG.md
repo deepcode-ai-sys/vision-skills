@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Default Gemini model updated** from `gemini-2.0-flash` (returns 429 /
+  restricted on current free tier) to `gemini-2.5-flash`, verified working
+  end-to-end against the live API.
+- **Increased Gemini plugin timeout** to 30s. `gemini-2.5-flash` uses
+  reasoning and can take 10-20s per call, which exceeded the previous 8s
+  default and caused spurious timeouts.
+- Verified end-to-end with a real API key: OCR (incl. Vietnamese), object
+  detection with bounding boxes, and combined single-call behavior all work.
+
 ### Changed
 - **Gemini calls combined.** OCR and object detection now share a single
   Gemini API call per request (memoized per request context) instead of two

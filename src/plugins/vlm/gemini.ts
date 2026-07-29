@@ -12,7 +12,7 @@ import { callGemini } from '../gemini/client.js';
 export class GeminiVLMClient implements VLMClient {
   constructor(
     private apiKey?: string,
-    private model = 'gemini-2.0-flash',
+    private model = 'gemini-2.5-flash',
   ) {}
 
   get available(): boolean {

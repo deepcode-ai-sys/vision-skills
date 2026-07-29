@@ -14,10 +14,12 @@ export class GeminiOCRPlugin extends BasePlugin {
   readonly pluginType: PluginType = 'ocr';
   readonly provider = 'gemini';
   override readonly costEstimate = 0; // free tier
+  // gemini-2.5-flash uses reasoning and can take 10-20s; allow headroom.
+  override readonly timeoutMs = 30000;
 
   constructor(
     private apiKey?: string,
-    private model = 'gemini-2.0-flash',
+    private model = 'gemini-2.5-flash',
   ) {
     super();
   }

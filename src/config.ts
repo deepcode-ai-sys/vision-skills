@@ -60,7 +60,7 @@ export function resolveConfig(config: VisionSkillsConfig = {}): ResolvedConfig {
     googleCloudVisionKey: config.googleCloudVisionKey ?? env.GOOGLE_CLOUD_VISION_KEY,
     anthropicApiKey: config.anthropicApiKey ?? env.ANTHROPIC_API_KEY,
     vlmProvider: config.vlmProvider ?? 'gemini',
-    geminiModel: config.geminiModel ?? 'gemini-2.0-flash',
+    geminiModel: config.geminiModel ?? 'gemini-2.5-flash',
     claudeModel: config.claudeModel ?? 'claude-3-5-sonnet-20241022',
     defaultMode: config.defaultMode ?? 'standard',
     enableSemanticRelationships: config.enableSemanticRelationships ?? true,
