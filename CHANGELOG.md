@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Gemini calls combined.** OCR and object detection now share a single
+  Gemini API call per request (memoized per request context) instead of two
+  separate calls — roughly halves token cost and rate-limit pressure for
+  `standard`+ modes.
+- **Gemini client now retries transient failures** (429/5xx and network
+  errors) with exponential backoff + jitter, honoring the `Retry-After`
+  header. Client errors (4xx except 429) fail fast. Configurable via `retry`.
+- **Smarter classifier confidence.** Confidence is now margin-based (winner
+  vs runner-up), so ambiguous images get lower confidence and fall back to
+  `mixed`/Standard mode. Added brightness + color-variety signals to better
+  separate documents, UI, and photos.
+
+### Added
+- UI/layout hierarchy: entities now get a `parentId` set to the tightest
+  containing entity (`SpatialGraphBuilder.assignHierarchy`).
+
 ## [0.1.0] - 2026-07-29
 
 Initial release.

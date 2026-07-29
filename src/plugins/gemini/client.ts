@@ -15,6 +15,18 @@ import { ProviderError } from '../../core/errors.js';
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
+/** HTTP status codes worth retrying (transient). */
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+export interface GeminiRetryOptions {
+  /** Max attempts (including the first). Default 3. */
+  maxAttempts?: number;
+  /** Base delay in ms for exponential backoff. Default 500. */
+  baseDelayMs?: number;
+  /** Max delay cap in ms. Default 8000. */
+  maxDelayMs?: number;
+}
+
 export interface GeminiCallOptions {
   apiKey: string;
   model: string;
@@ -23,11 +35,40 @@ export interface GeminiCallOptions {
   timeoutMs?: number;
   /** Ask Gemini to return JSON (sets responseMimeType). */
   jsonOutput?: boolean;
+  retry?: GeminiRetryOptions;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Compute backoff delay for an attempt (exponential + jitter). If the server
+ * sent a Retry-After header, honor it (seconds or HTTP-date).
+ */
+function backoffDelay(
+  attempt: number,
+  base: number,
+  cap: number,
+  retryAfter: string | null,
+): number {
+  if (retryAfter) {
+    const asSeconds = Number(retryAfter);
+    if (!Number.isNaN(asSeconds)) return Math.min(asSeconds * 1000, cap);
+    const asDate = Date.parse(retryAfter);
+    if (!Number.isNaN(asDate)) return Math.min(Math.max(0, asDate - Date.now()), cap);
+  }
+  const exp = Math.min(base * 2 ** attempt, cap);
+  const jitter = Math.random() * base; // full jitter up to base
+  return Math.min(exp + jitter, cap);
 }
 
 /** Call Gemini generateContent with an image + prompt, return the text. */
 export async function callGemini(opts: GeminiCallOptions): Promise<string> {
   const { apiKey, model, prompt, imageBase64, timeoutMs = 20000, jsonOutput } = opts;
+  const maxAttempts = opts.retry?.maxAttempts ?? 3;
+  const baseDelay = opts.retry?.baseDelayMs ?? 500;
+  const maxDelay = opts.retry?.maxDelayMs ?? 8000;
 
   const body: Record<string, unknown> = {
     contents: [
@@ -44,23 +85,59 @@ export async function callGemini(opts: GeminiCallOptions): Promise<string> {
   }
 
   const url = `${BASE}/${model}:generateContent?key=${apiKey}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (err) {
+      // Network error / timeout — retryable
+      lastError = err as Error;
+      if (attempt < maxAttempts - 1) {
+        await sleep(backoffDelay(attempt, baseDelay, maxDelay, null));
+        continue;
+      }
+      throw new ProviderError(
+        `Gemini request failed after ${maxAttempts} attempts: ${lastError.message}`,
+        'gemini',
+        lastError,
+      );
+    }
+
+    if (response.ok) {
+      const result = (await response.json()) as Record<string, unknown>;
+      return extractText(result);
+    }
+
     const text = await response.text();
-    throw new ProviderError(
-      `Gemini returned HTTP ${response.status}: ${text.slice(0, 200)}`,
-      'gemini',
-    );
+    const status = response.status;
+
+    // Retry transient errors; fail fast on client errors (4xx except 429)
+    if (RETRYABLE_STATUS.has(status) && attempt < maxAttempts - 1) {
+      const delay = backoffDelay(
+        attempt,
+        baseDelay,
+        maxDelay,
+        response.headers.get('retry-after'),
+      );
+      lastError = new Error(`HTTP ${status}: ${text.slice(0, 200)}`);
+      await sleep(delay);
+      continue;
+    }
+
+    throw new ProviderError(`Gemini returned HTTP ${status}: ${text.slice(0, 200)}`, 'gemini');
   }
 
-  const result = (await response.json()) as Record<string, unknown>;
-  return extractText(result);
+  throw new ProviderError(
+    `Gemini request failed after ${maxAttempts} attempts: ${lastError?.message ?? 'unknown'}`,
+    'gemini',
+  );
 }
 
 function extractText(result: Record<string, unknown>): string {

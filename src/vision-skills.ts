@@ -134,6 +134,9 @@ export class VisionSkills {
     });
     const spatialEdges = spatialBuilder.build(entities);
 
+    // Assign UI/layout hierarchy (parentId) from containment relationships.
+    SpatialGraphBuilder.assignHierarchy(entities);
+
     // 7b/8. Semantic + reasoner (VLM, Advanced/Full only)
     let semanticEdges: SceneGraph['semantic'] = [];
     let reasonerOutput = null;

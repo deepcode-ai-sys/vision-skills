@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { GeminiOCRPlugin } from '../src/plugins/ocr/gemini.js';
-import { GeminiDetectionPlugin } from '../src/plugins/detection/gemini.js';
 import { geminiBoxToPixels, stripFences } from '../src/plugins/gemini/client.js';
+import { parseCombined } from '../src/plugins/gemini/analyzer.js';
 
 describe('Gemini box conversion', () => {
   it('converts [ymin,xmin,ymax,xmax] 0-1000 to pixels', () => {
@@ -24,62 +23,56 @@ describe('stripFences', () => {
   });
 });
 
-describe('GeminiOCRPlugin.parse', () => {
-  const plugin = new GeminiOCRPlugin('test-key');
-
-  it('parses text blocks with boxes', () => {
-    const raw = JSON.stringify([
-      { text: 'Xin chào', box_2d: [100, 200, 200, 600], language: 'vi' },
-    ]);
-    const parsed = plugin.parse(raw, 1000, 1000);
-    const blocks = parsed.text_blocks as Array<Record<string, unknown>>;
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0]!.text).toBe('Xin chào');
-    expect(blocks[0]!.language).toBe('vi');
-    expect(blocks[0]!.bbox).toEqual([200, 100, 600, 200]);
-    expect(parsed.full_text).toBe('Xin chào');
+describe('parseCombined (OCR + detection in one response)', () => {
+  it('parses both text blocks and objects', () => {
+    const raw = JSON.stringify({
+      text_blocks: [{ text: 'Xin chào', box_2d: [100, 200, 200, 600], language: 'vi' }],
+      objects: [{ label: 'person', box_2d: [100, 100, 500, 300], confidence: 0.95 }],
+    });
+    const result = parseCombined(raw, 1000, 1000);
+    expect(result.textBlocks).toHaveLength(1);
+    expect(result.textBlocks[0]!.text).toBe('Xin chào');
+    expect(result.textBlocks[0]!.language).toBe('vi');
+    expect(result.textBlocks[0]!.bbox).toEqual([200, 100, 600, 200]);
+    expect(result.objects).toHaveLength(1);
+    expect(result.objects[0]!.label).toBe('person');
+    expect(result.objects[0]!.bbox).toEqual([100, 100, 300, 500]);
   });
 
   it('handles code-fenced output', () => {
-    const raw = '```json\n[{"text":"Hi","box_2d":[0,0,100,100]}]\n```';
-    const parsed = plugin.parse(raw, 500, 500);
-    expect((parsed.text_blocks as unknown[]).length).toBe(1);
+    const raw = '```json\n{"text_blocks":[{"text":"Hi","box_2d":[0,0,100,100]}],"objects":[]}\n```';
+    const result = parseCombined(raw, 500, 500);
+    expect(result.textBlocks).toHaveLength(1);
+    expect(result.objects).toHaveLength(0);
   });
 
   it('handles empty / invalid', () => {
-    expect((plugin.parse('not json', 100, 100).text_blocks as unknown[]).length).toBe(0);
-    expect((plugin.parse('[]', 100, 100).text_blocks as unknown[]).length).toBe(0);
+    expect(parseCombined('not json', 100, 100).textBlocks).toHaveLength(0);
+    expect(parseCombined('{}', 100, 100).objects).toHaveLength(0);
   });
 
-  it('filters out empty text', () => {
-    const raw = JSON.stringify([{ text: '  ', box_2d: [0, 0, 10, 10] }]);
-    expect((plugin.parse(raw, 100, 100).text_blocks as unknown[]).length).toBe(0);
-  });
-});
-
-describe('GeminiDetectionPlugin.parse', () => {
-  const plugin = new GeminiDetectionPlugin('test-key');
-
-  it('parses objects with boxes', () => {
-    const raw = JSON.stringify([
-      { label: 'person', box_2d: [100, 100, 500, 300], confidence: 0.95 },
-      { label: 'car', box_2d: [200, 400, 600, 800], confidence: 0.88 },
-    ]);
-    const parsed = plugin.parse(raw, 1000, 1000);
-    const objects = parsed.objects as Array<Record<string, unknown>>;
-    expect(objects).toHaveLength(2);
-    expect(objects[0]!.label).toBe('person');
-    expect(objects[0]!.bbox).toEqual([100, 100, 300, 500]);
-    expect(parsed.confidence).toBeCloseTo(0.915, 2);
+  it('filters out empty text and labels', () => {
+    const raw = JSON.stringify({
+      text_blocks: [{ text: '  ', box_2d: [0, 0, 10, 10] }],
+      objects: [{ label: '', box_2d: [0, 0, 10, 10] }],
+    });
+    const result = parseCombined(raw, 100, 100);
+    expect(result.textBlocks).toHaveLength(0);
+    expect(result.objects).toHaveLength(0);
   });
 
-  it('handles empty', () => {
-    expect((plugin.parse('[]', 100, 100).objects as unknown[]).length).toBe(0);
+  it('defaults object confidence when missing', () => {
+    const raw = JSON.stringify({
+      text_blocks: [],
+      objects: [{ label: 'dog', box_2d: [0, 0, 100, 100] }],
+    });
+    const result = parseCombined(raw, 100, 100);
+    expect(result.objects[0]!.confidence).toBe(0.85);
   });
 
-  it('defaults confidence when missing', () => {
-    const raw = JSON.stringify([{ label: 'dog', box_2d: [0, 0, 100, 100] }]);
-    const objects = plugin.parse(raw, 100, 100).objects as Array<Record<string, unknown>>;
-    expect(objects[0]!.confidence).toBe(0.85);
+  it('tolerates missing arrays', () => {
+    const result = parseCombined('{"text_blocks":[{"text":"A","box_2d":[0,0,50,50]}]}', 100, 100);
+    expect(result.textBlocks).toHaveLength(1);
+    expect(result.objects).toHaveLength(0);
   });
 });

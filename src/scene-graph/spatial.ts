@@ -101,4 +101,35 @@ export class SpatialGraphBuilder {
       outer.y2 >= inner.y2;
     return inside && outer.area > 1.5 * inner.area;
   }
+
+  /**
+   * Assign UI/layout hierarchy by mutating each entity's `parentId`.
+   *
+   * Each entity's parent is the SMALLEST other entity that fully contains it
+   * (so nesting is tight, not just the outermost container). Runs in-place.
+   */
+  static assignHierarchy(entities: Entity[]): void {
+    for (const child of entities) {
+      let bestParent: Entity | null = null;
+      for (const candidate of entities) {
+        if (candidate.entityId === child.entityId) continue;
+        if (!SpatialGraphBuilder.fullyContains(candidate.bbox, child.bbox)) continue;
+        // Prefer the smallest containing box (tightest parent).
+        if (bestParent === null || candidate.bbox.area < bestParent.bbox.area) {
+          bestParent = candidate;
+        }
+      }
+      child.parentId = bestParent ? bestParent.entityId : null;
+    }
+  }
+
+  private static fullyContains(outer: BoundingBox, inner: BoundingBox): boolean {
+    const inside =
+      outer.x1 <= inner.x1 &&
+      outer.y1 <= inner.y1 &&
+      outer.x2 >= inner.x2 &&
+      outer.y2 >= inner.y2;
+    // Strictly larger so an identical box isn't its own parent.
+    return inside && outer.area > inner.area * 1.05;
+  }
 }
