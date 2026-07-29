@@ -25,11 +25,16 @@ async function makeTextImage() {
 async function main() {
   const apiKey = process.argv[2];
   if (!apiKey) {
-    console.error('Usage: node scripts/smoke.mjs <api-key>');
+    console.error('Usage: node scripts/smoke.mjs <api-key> [mode] [imagePath]');
     process.exit(1);
   }
 
-  const image = await makeTextImage();
+  // If an image path is provided as the 4th arg, use it; else the synthetic one.
+  const imgPath = process.argv[4];
+  const image = imgPath
+    ? await sharp(imgPath).png().toBuffer()
+    : await makeTextImage();
+  if (imgPath) console.log(`(using real image: ${imgPath})`);
   const vision = new VisionSkills({ geminiApiKey: apiKey, cacheEnabled: false });
 
   console.log('=== Provider health ===');

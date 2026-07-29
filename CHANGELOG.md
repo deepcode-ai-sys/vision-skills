@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **Scene graph edge explosion fixed.** Directional/near relations are now
+  computed only against each entity's K nearest neighbors (default 6) instead
+  of every pair. On a real dashboard screenshot (121 entities) this cut the
+  spatial graph from ~28,600 edges to ~340 meaningful ones. `contains` and
+  `overlapping` are still computed for all pairs. Configurable via
+  `maxNeighbors`.
 - **Semantic relations are now image-type aware.** Real-world images use
   physical relations (holding, wearing...); UI/document images use UI
   relations (contains, part_of, labels, controls, submits...). Previously a
