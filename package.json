@@ -1,0 +1,79 @@
+{
+  "name": "vision-skills",
+  "version": "0.1.0",
+  "description": "Turn images into structured JSON for text-only or vision-weak AI models. Cloud-only, multi-provider, plugin-based.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "serve": "node dist/server/start.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "vision",
+    "ocr",
+    "image-analysis",
+    "structured-output",
+    "llm",
+    "ai",
+    "multimodal",
+    "scene-graph",
+    "computer-vision",
+    "gemini"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nhaca/vision-skills.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nhaca/vision-skills/issues"
+  },
+  "homepage": "https://github.com/nhaca/vision-skills#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5"
+  },
+  "peerDependencies": {
+    "fastify": "^4.28.0"
+  },
+  "peerDependenciesMeta": {
+    "fastify": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "@types/node": "^22.5.0",
+    "eslint": "^9.9.0",
+    "fastify": "^4.28.0",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.2.0",
+    "vitest": "^2.0.5"
+  }
+}
