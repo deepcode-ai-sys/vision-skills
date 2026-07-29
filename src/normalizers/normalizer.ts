@@ -115,7 +115,12 @@ export class Normalizer {
       bbox: this.parseBbox(block.bbox as number[]),
       confidence: Number(block.confidence ?? 0),
       text: (block.text as string) ?? null,
-      metadata: { language: block.language ?? null },
+      // Tier 4: carry rich text attributes (color/emphasis) when present.
+      metadata: {
+        language: block.language ?? null,
+        ...(block.color ? { color: block.color } : {}),
+        ...(block.emphasis ? { emphasis: block.emphasis } : {}),
+      },
       sourcePlugins: [source],
     };
   }

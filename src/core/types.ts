@@ -263,6 +263,14 @@ export interface Table {
   bbox?: BoundingBox;
 }
 
+/** Detected code / terminal / IDE content (tier 6). */
+export interface CodeInfo {
+  language: string | null;
+  functions: string[];
+  errors: string[];
+  snippet: string | null;
+}
+
 // ============================================================================
 // Final response
 // ============================================================================
@@ -273,6 +281,7 @@ export interface VisionResponse {
   modeUsed: ProcessingMode;
   entities: Entity[];
   tables: Table[];
+  code: CodeInfo | null;
   sceneGraph: SceneGraph;
   reasonerOutput: ReasonerOutput | null;
   providerResults: PluginResult[];

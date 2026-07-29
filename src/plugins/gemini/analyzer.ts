@@ -23,11 +23,30 @@ export interface ExtractedTable {
   box_2d?: number[];
 }
 
+export interface TextBlockDetail {
+  text: string;
+  bbox: number[];
+  confidence: number;
+  language: string | null;
+  /** Tier 4: rich text attributes (best-effort, VLM-estimated). */
+  color?: string | null;
+  emphasis?: string | null; // e.g. "bold", "heading", "error", "muted"
+}
+
+export interface CodeInfo {
+  language: string | null;
+  functions: string[];
+  errors: string[];
+  snippet: string | null;
+}
+
 export interface CombinedResult {
   imageType: ImageType | null;
-  textBlocks: Array<{ text: string; bbox: number[]; confidence: number; language: string | null }>;
+  textBlocks: TextBlockDetail[];
   objects: Array<{ label: string; bbox: number[]; confidence: number }>;
   tables: ExtractedTable[];
+  /** Tier 6: code understanding when the image shows code. */
+  code: CodeInfo | null;
 }
 
 /**
@@ -41,9 +60,10 @@ const PROMPT = `You are a meticulous image analysis engine. Analyze this image T
 Return ONLY a JSON object (no markdown) with this exact shape:
 {
   "image_type": "real_world | screen_ui | document | mixed",
-  "text_blocks": [{"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "language": "vi"}],
+  "text_blocks": [{"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "language": "vi", "color": "#ff3333", "emphasis": "error"}],
   "objects": [{"label": "person", "box_2d": [ymin, xmin, ymax, xmax], "confidence": 0.95}],
-  "tables": [{"title": "...", "columns": ["col1","col2"], "rows": [["a","b"],["c","d"]], "box_2d": [ymin, xmin, ymax, xmax]}]
+  "tables": [{"title": "...", "columns": ["col1","col2"], "rows": [["a","b"],["c","d"]], "box_2d": [ymin, xmin, ymax, xmax]}],
+  "code": {"language": "python", "functions": ["render_video"], "errors": ["TypeError: ..."], "snippet": "def render_video(): ..."}
 }
 
 CRITICAL rules for thoroughness:
@@ -52,9 +72,15 @@ CRITICAL rules for thoroughness:
 - Keep numbers together with their units/labels in one block when they belong
   together (e.g. "~$2203.68", "456.238.541 tokens", "17s ago").
 - Preserve original language and diacritics exactly (e.g. Vietnamese: "Theo dõi").
+- For each text block, when visually clear, add "color" (hex) and "emphasis"
+  (one of: "heading", "bold", "error", "warning", "success", "muted", "link",
+  or omit if normal). Best-effort; omit if unsure.
 - If the image contains any TABLE or list of rows (dashboards, invoices,
   logs, spreadsheets), extract it into "tables" as columns + rows. Still also
   include the individual cells in text_blocks.
+- If the image shows source code, a terminal, or an IDE, fill "code" with the
+  detected language, visible function/class names, any error/stack-trace text,
+  and a short representative snippet. Otherwise set "code" to null.
 - image_type: "screen_ui" for app/website/software; "document" for
   scanned/photographed paper; "real_world" for photos; "mixed" if unclear.
 - box_2d values are integers 0-1000 normalized to image dimensions.
@@ -127,7 +153,7 @@ export function parseCombined(raw: string, width: number, height: number): Combi
     const parsed = JSON.parse(stripFences(raw));
     data = typeof parsed === 'object' && parsed !== null ? parsed : {};
   } catch {
-    return { imageType: null, textBlocks: [], objects: [], tables: [] };
+    return { imageType: null, textBlocks: [], objects: [], tables: [], code: null };
   }
 
   const rawType = data.image_type as string | undefined;
@@ -145,6 +171,8 @@ export function parseCombined(raw: string, width: number, height: number): Combi
       bbox: geminiBoxToPixels((d.box_2d as number[]) ?? [], width, height),
       confidence: 0.9,
       language: (d.language as string) ?? null,
+      color: (d.color as string) ?? null,
+      emphasis: (d.emphasis as string) ?? null,
     }))
     .filter((b) => b.text.trim().length > 0);
 
@@ -173,7 +201,21 @@ export function parseCombined(raw: string, width: number, height: number): Combi
     }))
     .filter((t) => t.columns.length > 0 || t.rows.length > 0);
 
-  return { imageType, textBlocks, objects, tables };
+  const rawCode = data.code;
+  let code: CodeInfo | null = null;
+  if (rawCode && typeof rawCode === 'object') {
+    const c = rawCode as Record<string, unknown>;
+    const functions = Array.isArray(c.functions) ? c.functions.map((f) => String(f)) : [];
+    const errors = Array.isArray(c.errors) ? c.errors.map((e) => String(e)) : [];
+    const language = (c.language as string) ?? null;
+    const snippet = (c.snippet as string) ?? null;
+    // Only keep if there's actually something useful.
+    if (language || functions.length > 0 || errors.length > 0 || snippet) {
+      code = { language, functions, errors, snippet };
+    }
+  }
+
+  return { imageType, textBlocks, objects, tables, code };
 }
 
 /**
@@ -203,5 +245,16 @@ export async function getGeminiTables(
     return (await existing).tables;
   } catch {
     return [];
+  }
+}
+
+/** Read the detected code info from the memoized combined result (or null). */
+export async function getGeminiCode(context: RequestContext): Promise<CodeInfo | null> {
+  const existing = cache.get(context);
+  if (!existing) return null;
+  try {
+    return (await existing).code;
+  } catch {
+    return null;
   }
 }

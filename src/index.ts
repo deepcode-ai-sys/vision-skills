@@ -37,6 +37,7 @@ export {
   type ImageInput,
   type Entity,
   type Table,
+  type CodeInfo,
   type SceneGraph,
   type SpatialRelationEdge,
   type SemanticRelationEdge,

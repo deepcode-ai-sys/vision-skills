@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Rich text attributes (color + emphasis).** Each text block can now carry a
+  `color` (hex) and `emphasis` ("heading" / "bold" / "error" / "warning" /
+  "success" / "muted" / "link"), surfaced in entity metadata. Lets a text-only
+  model infer visual context — e.g. which tab is selected (white/bold) vs
+  muted (gray), or that a message is an error (red). Verified live: 90/115
+  blocks on the dashboard carried color/emphasis. No extra API calls.
+- **Code understanding.** When the image shows source code, a terminal, or an
+  IDE, the response includes `code` (language, function/class names, error /
+  stack-trace text, a representative snippet), else `null`. No extra API calls.
 - **Deep (multi-region) analysis mode.** Set `analysisDepth: 'deep'` to tile
   large/dense images, read each tile at higher effective resolution, then
   merge + dedupe. On a real dashboard this raised text extraction from ~41-95

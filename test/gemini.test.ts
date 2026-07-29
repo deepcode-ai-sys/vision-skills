@@ -109,4 +109,48 @@ describe('parseCombined (OCR + detection in one response)', () => {
     });
     expect(parseCombined(raw, 100, 100).tables).toHaveLength(0);
   });
+
+  it('parses text color and emphasis (tier 4)', () => {
+    const raw = JSON.stringify({
+      text_blocks: [
+        { text: 'Build failed', box_2d: [0, 0, 50, 200], color: '#ff3333', emphasis: 'error' },
+      ],
+      objects: [],
+    });
+    const result = parseCombined(raw, 500, 500);
+    expect(result.textBlocks[0]!.color).toBe('#ff3333');
+    expect(result.textBlocks[0]!.emphasis).toBe('error');
+  });
+
+  it('parses code info (tier 6)', () => {
+    const raw = JSON.stringify({
+      text_blocks: [],
+      objects: [],
+      code: {
+        language: 'python',
+        functions: ['render_video', 'main'],
+        errors: ['TypeError: x'],
+        snippet: 'def render_video():',
+      },
+    });
+    const result = parseCombined(raw, 500, 500);
+    expect(result.code).not.toBeNull();
+    expect(result.code!.language).toBe('python');
+    expect(result.code!.functions).toEqual(['render_video', 'main']);
+    expect(result.code!.errors).toEqual(['TypeError: x']);
+  });
+
+  it('code is null when not code content', () => {
+    const raw = JSON.stringify({ text_blocks: [], objects: [], code: null });
+    expect(parseCombined(raw, 100, 100).code).toBeNull();
+  });
+
+  it('code is null when code object is empty', () => {
+    const raw = JSON.stringify({
+      text_blocks: [],
+      objects: [],
+      code: { language: null, functions: [], errors: [], snippet: null },
+    });
+    expect(parseCombined(raw, 100, 100).code).toBeNull();
+  });
 });

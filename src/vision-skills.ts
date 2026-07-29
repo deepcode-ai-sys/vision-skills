@@ -31,7 +31,7 @@ import type { VisionPlugin } from './plugins/base.js';
 import { GeminiOCRPlugin } from './plugins/ocr/gemini.js';
 import { GeminiDetectionPlugin } from './plugins/detection/gemini.js';
 import { GeminiVLMClient } from './plugins/vlm/gemini.js';
-import { getGeminiImageType, getGeminiTables } from './plugins/gemini/analyzer.js';
+import { getGeminiImageType, getGeminiTables, getGeminiCode } from './plugins/gemini/analyzer.js';
 import { GeminiKeyPool } from './plugins/gemini/key-pool.js';
 import { GoogleVisionOCRPlugin } from './plugins/ocr/google-vision.js';
 import { GoogleVisionDetectionPlugin } from './plugins/detection/google-vision.js';
@@ -147,6 +147,9 @@ export class VisionSkills {
       bbox: t.box_2d ? BoundingBox.fromList(t.box_2d) : undefined,
     }));
 
+    // Detected code / terminal content (tier 6), if any.
+    const code = await getGeminiCode(context);
+
     // 7. Spatial scene graph (all modes)
     const spatialBuilder = new SpatialGraphBuilder(width, height, {
       thresholdX: this.config.spatialThresholdX,
@@ -201,6 +204,7 @@ export class VisionSkills {
       modeUsed: mode,
       entities,
       tables,
+      code,
       sceneGraph,
       reasonerOutput,
       providerResults: pluginResults,
