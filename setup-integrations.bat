@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 
 :: ============================================================
 ::  Vision Skills - Interactive Setup Menu
-::  Ho tro tich hop vision cho AI tools khong doc duoc anh
+::  Give text-only AI tools the ability to see and understand images
 :: ============================================================
 
 set VERSION=1.0
@@ -14,48 +14,48 @@ set VERSION=1.0
 cls
 echo ============================================
 echo    Vision Skills v%VERSION% - Setup Integrations
-echo    Bien AI text-only thanh AI biet nhin anh
+echo    Give text-only AI models the ability to see images
 echo ============================================
 echo.
-echo  Ban can 1 Gemini API key (free, khong can the tin dung)
-echo  Lay key tai: https://aistudio.google.com/apikey
+echo  You need a Gemini API key (free, no credit card required).
+echo  Get one at: https://aistudio.google.com/apikey
 echo.
-set /p GEMINI_KEY="Nhap Gemini API key cua ban: "
+set /p GEMINI_KEY="Enter your Gemini API key: "
 
 if "%GEMINI_KEY%"=="" (
     echo.
-    echo  [!] Vui long nhap key de tiep tuc.
-    echo  Neu khong co key, lay mien phi tai:
-    echo  https://aistudio.google.com/apikey
+    echo  [!] Key cannot be empty. Please enter a valid key.
+    echo  Get a free key: https://aistudio.google.com/apikey
     echo.
     pause
     goto GETKEY
 )
 
-:: Kiem tra so bo - key Gemini bat dau bang AIza
+:: Basic validation - Gemini keys start with AIza
 if not "%GEMINI_KEY:~0,4%"=="AIza" (
     echo.
-    echo  [!] Key khong hop le. Key Gemini thuong bat dau bang AIza...
+    echo  [!] Invalid key format. Gemini keys typically start with 'AIza...'
+    echo  Get a free key: https://aistudio.google.com/apikey
     echo.
     pause
     goto GETKEY
 )
 
-:: Cai dat global
+:: Install global
 cls
 echo.
-echo  Dang cai dat vision-skills global (co the mat vai giay)...
+echo  Installing vision-skills globally...
 call npm install -g vision-skills 2>&1 | findstr /v "npm WARN"
-echo  + Da cai dat.
+echo  + Installed.
 
 :MENU
 cls
 echo ============================================
 echo    Vision Skills v%VERSION%
-echo    Key: %GEMINI_KEY:~0,12%... (da luu)
+echo    Key: %GEMINI_KEY:~0,12%... (saved)
 echo ============================================
 echo.
-echo  Chon nen tang can tich hop:
+echo  Select platform to integrate:
 echo.
 echo  [1]  OpenCode
 echo  [2]  Claude Code CLI
@@ -67,12 +67,12 @@ echo  [7]  VS Code
 echo  [8]  Cline / Roo / Kilo Code
 echo  [9]  9Router
 echo.
-echo  [A]  Tat ca
-echo  [B]  Chi cai global CLI + set env
+echo  [A]  All
+echo  [B]  CLI only + set env
 echo.
-echo  [0]  Thoat
+echo  [0]  Exit
 echo.
-set /p choice="Chon (0-9, A, B): "
+set /p choice="Select (0-9, A, B): "
 
 if "%choice%"=="0" goto EOF
 if "%choice%"=="1" goto SETUP_OPENCODE
@@ -122,7 +122,7 @@ set CFG=%USERPROFILE%\.claude\claude.json
 if not exist "%CFG%" (
     call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
 ) else (
-    echo  + File exists. Them MCP thu cong vao %CFG%
+    echo  + File exists. Add MCP manually vao %CFG%
 )
 echo  + Done!
 pause
@@ -136,7 +136,7 @@ set CFG=%USERPROFILE%\.codex\config.json
 if not exist "%CFG%" (
     call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
 ) else (
-    echo  + File exists. Them MCP thu cong.
+    echo  + File exists. Add MCP manually.
 )
 echo  + Done!
 pause
@@ -150,7 +150,7 @@ set CFG=%USERPROFILE%\.cursor\mcp.json
 if not exist "%CFG%" (
     call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
 ) else (
-    echo  + File exists. Them MCP thu cong.
+    echo  + File exists. Add MCP manually.
 )
 echo  + Done!
 pause
@@ -164,7 +164,7 @@ set CFG=%USERPROFILE%\.continue\config.json
 if not exist "%CFG%" (
     call :MAKE_JSON "%CFG%" "{ \"experimental\": { \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } } }"
 ) else (
-    echo  + File exists. Them MCP thu cong.
+    echo  + File exists. Add MCP manually.
 )
 echo  + Done!
 pause
@@ -218,7 +218,7 @@ echo  |      "args": ["vision-skills-mcp"]     |
 echo  |    }                                   |
 echo  |  }                                     |
 echo  +---------------------------------------+
-echo  (Cac tool nay doc key tu GEMINI_API_KEYS env)
+echo  (These tools read the key from GEMINI_API_KEYS env)
 echo.
 pause
 goto MENU
@@ -264,9 +264,9 @@ if not exist "%CFG%" (
     call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
 )
 echo.
-echo  + Da cau hinh xong cho OpenCode, Claude Code, Cursor!
-echo  + Key cua ban da duoc dien tu dong vao cac file.
-echo  + Khoi dong lai AI tool de nhan thay doi.
+echo  + Configured xong cho OpenCode, Claude Code, Cursor!
+echo  + Your API key has been auto-filled.
+echo  + Restart your AI tool to apply changes.
 echo.
 pause
 goto MENU
@@ -277,10 +277,10 @@ echo.
 echo --- Set Env + CLI ---
 echo  Dat GEMINI_API_KEYS vao he thong...
 setx GEMINI_API_KEYS "%GEMINI_KEY%" >nul
-echo  + Da luu vao Environment Variables.
-echo  + Mo terminal MOI de nhan thay doi.
+echo  + Saved to Environment Variables.
+echo  + Open a NEW terminal to apply.
 echo.
-echo  Kiem tra: vision-skills analyze ./anh.jpg
+echo  Test it: vision-skills analyze ./anh.jpg
 echo.
 pause
 goto MENU
@@ -288,7 +288,7 @@ goto MENU
 :EOF
 cls
 echo.
-echo  Cam on ban da su dung Vision Skills!
+echo  Thank you for using Vision Skills!
 echo  https://github.com/deepcode-ai-sys/vision-skills
 echo.
 pause

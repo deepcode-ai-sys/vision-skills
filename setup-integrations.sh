@@ -5,7 +5,7 @@ VERSION="1.0"
 
 echo "============================================"
 echo " Vision Skills v${VERSION} - Setup Integrations"
-echo " Bien AI text-only thanh AI biet nhin anh"
+echo " Give text-only AI the ability to see images"
 echo "============================================"
 echo ""
 
@@ -17,20 +17,20 @@ fi
 
 # ---- Get API key ----
 while true; do
-  echo "Ban can 1 Gemini API key (free, khong can the tin dung)"
-  echo "Lay key tai: https://aistudio.google.com/apikey"
+  echo "You need a Gemini API key (free, no credit card required)"
+  echo "Get one at: https://aistudio.google.com/apikey"
   echo ""
-  read -rp "Nhap Gemini API key cua ban: " GEMINI_KEY
+  read -rp "Enter your Gemini API key: " GEMINI_KEY
   echo ""
 
   if [[ -z "$GEMINI_KEY" ]]; then
-    echo "[!] Vui long nhap key."
+    echo "[!] Please enter a valid key."
     echo ""
     continue
   fi
 
   if [[ "$GEMINI_KEY" != AIza* ]]; then
-    echo "[!] Key khong hop le. Key Gemini thuong bat dau bang AIza..."
+    echo "[!] Invalid key format. Gemini keys typically start with AIza..."
     echo ""
     continue
   fi
@@ -40,7 +40,7 @@ done
 
 # ---- Install global ----
 echo ""
-echo "Dang cai dat vision-skills global..."
+echo "Installing vision-skills global..."
 npm install -g vision-skills 2>&1 | grep -v "npm WARN" || true
 echo "+ Da cai dat."
 
@@ -58,7 +58,7 @@ menu() {
   echo " Key: ${GEMINI_KEY:0:12}... (da luu)"
   echo "============================================"
   echo ""
-  echo "Chon nen tang can tich hop:"
+  echo "Select platform to integrate:"
   echo ""
   echo " 1) OpenCode"
   echo " 2) Claude Code CLI"
@@ -70,10 +70,10 @@ menu() {
   echo " 8) Cline / Roo / Kilo Code"
   echo " 9) 9Router"
   echo ""
-  echo " A) Tat ca"
-  echo " B) Chi cai global + set env"
+  echo " A) All"
+  echo " B) CLI only + set env"
   echo ""
-  echo " 0) Thoat"
+  echo " 0) Exit"
   echo ""
   read -rp "Chon (0-9, A, B): " choice
 
@@ -205,9 +205,9 @@ setup_all() {
     [ ! -f "$path" ] && make_json "$path" "$content"
   done
   echo ""
-  echo "+ Da cau hinh OpenCode + Claude Code + Cursor!"
-  echo "+ Key da duoc dien tu dong."
-  echo "+ Restart tool de nhan thay doi."
+  echo "+ Configured OpenCode + Claude Code + Cursor!"
+  echo "+ Your key has been auto-filled."
+  echo "+ Restart tool de to apply changes."
   read -rp "Press Enter..."
 }
 
@@ -217,10 +217,10 @@ setup_env() {
   echo "export GEMINI_API_KEYS='${GEMINI_KEY}'" >> "$HOME/.bashrc"
   echo "export GEMINI_API_KEYS='${GEMINI_KEY}'" >> "$HOME/.zshrc" 2>/dev/null || true
   echo "export GEMINI_API_KEYS='${GEMINI_KEY}'" >> "$HOME/.profile"
-  echo "+ Da them vao .bashrc / .zshrc / .profile"
-  echo "+ Mo terminal MOI hoac: source ~/.bashrc"
+  echo "+ Added to .bashrc / .zshrc / .profile"
+  echo "+ Open a NEW terminal hoac: source ~/.bashrc"
   echo ""
-  echo " Kiem tra: vision-skills analyze ./anh.jpg"
+  echo " Test it: vision-skills analyze ./anh.jpg"
   read -rp "Press Enter..."
 }
 
