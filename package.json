@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Turn images into structured JSON for text-only or vision-weak AI models. Cloud-only, multi-provider, plugin-based.",
   "type": "module",
+  "bin": {
+    "vision-skills": "./dist/cli.js",
+    "vision-skills-mcp": "./dist/mcp-server.js"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
