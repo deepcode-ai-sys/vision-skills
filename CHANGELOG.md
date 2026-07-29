@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Multi-key rotation (`GeminiKeyPool`).** Provide many Gemini keys via
+  `geminiApiKeys: [...]` (or `GEMINI_API_KEYS` env, comma-separated). The pool
+  rotates keys automatically: rate-limited (429) or bad (404/403/400) keys are
+  cooled down and skipped, successful keys are preferred. This works around the
+  free-tier per-key/per-day limits. Verified: 13/13 consecutive runs on a real
+  dense dashboard screenshot succeeded (~90 text blocks each, ~6-15s).
+
+### Changed
+- **Default Gemini model switched to `gemini-flash-lite-latest`.**
+  `gemini-2.5-flash` has a very low free-tier limit (20 requests/day/project)
+  and is slower (~16s on dense images). `flash-lite` is ~4x faster (~4-8s) with
+  a higher free quota, and reads Vietnamese text correctly. Verified live.
+- Tuned Gemini timeouts: per-attempt fetch timeout (20s) separated from the
+  orchestrator budget (60s) so a hanging/limited key is abandoned quickly and
+  rotation proceeds, instead of blocking on one slow key.
+
 ### Fixed
 - **Scene graph edge explosion fixed.** Directional/near relations are now
   computed only against each entity's K nearest neighbors (default 6) instead

@@ -12,6 +12,7 @@
 
 import type { RequestContext } from '../../core/types.js';
 import { callGemini, geminiBoxToPixels, stripFences } from './client.js';
+import type { GeminiKeyPool } from './key-pool.js';
 
 import type { ImageType } from '../../core/types.js';
 
@@ -51,7 +52,7 @@ const VALID_TYPES: ReadonlySet<string> = new Set([
 const cache = new WeakMap<RequestContext, Promise<CombinedResult>>();
 
 export async function analyzeCombined(
-  apiKey: string,
+  keyPool: GeminiKeyPool,
   model: string,
   image: Buffer,
   context: RequestContext,
@@ -60,20 +61,20 @@ export async function analyzeCombined(
   const existing = cache.get(context);
   if (existing) return existing;
 
-  const promise = doAnalyze(apiKey, model, image, context, timeoutMs);
+  const promise = doAnalyze(keyPool, model, image, context, timeoutMs);
   cache.set(context, promise);
   return promise;
 }
 
 async function doAnalyze(
-  apiKey: string,
+  keyPool: GeminiKeyPool,
   model: string,
   image: Buffer,
   context: RequestContext,
   timeoutMs: number,
 ): Promise<CombinedResult> {
   const raw = await callGemini({
-    apiKey,
+    keyPool,
     model,
     prompt: PROMPT,
     imageBase64: image.toString('base64'),

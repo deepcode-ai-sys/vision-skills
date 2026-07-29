@@ -10,6 +10,8 @@ import type { ProcessingMode } from './core/types.js';
 export interface VisionSkillsConfig {
   // Provider credentials
   geminiApiKey?: string; // FREE tier at Google AI Studio (no credit card)
+  /** Multiple Gemini keys for rotation (bypasses per-key free-tier limits). */
+  geminiApiKeys?: string[];
   googleCloudVisionKey?: string; // paid
   anthropicApiKey?: string; // paid
 
@@ -46,8 +48,10 @@ export interface VisionSkillsConfig {
 }
 
 export interface ResolvedConfig extends Required<Omit<VisionSkillsConfig,
-  'geminiApiKey' | 'googleCloudVisionKey' | 'anthropicApiKey'>> {
+  'geminiApiKey' | 'geminiApiKeys' | 'googleCloudVisionKey' | 'anthropicApiKey'>> {
   geminiApiKey?: string;
+  /** Resolved, de-duplicated list of all Gemini keys (single + array + env). */
+  geminiApiKeys: string[];
   googleCloudVisionKey?: string;
   anthropicApiKey?: string;
 }
@@ -55,12 +59,28 @@ export interface ResolvedConfig extends Required<Omit<VisionSkillsConfig,
 export function resolveConfig(config: VisionSkillsConfig = {}): ResolvedConfig {
   const env = (typeof process !== 'undefined' ? process.env : {}) as Record<string, string>;
 
+  // Collect all Gemini keys: single key + array + env (single or comma list).
+  const envKeys = (env.GEMINI_API_KEYS ?? '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean);
+  const allGeminiKeys = [
+    ...(config.geminiApiKeys ?? []),
+    ...(config.geminiApiKey ? [config.geminiApiKey] : []),
+    ...(env.GEMINI_API_KEY ? [env.GEMINI_API_KEY] : []),
+    ...envKeys,
+  ]
+    .map((k) => k.trim())
+    .filter(Boolean);
+  const dedupedKeys = [...new Set(allGeminiKeys)];
+
   return {
-    geminiApiKey: config.geminiApiKey ?? env.GEMINI_API_KEY,
+    geminiApiKey: dedupedKeys[0],
+    geminiApiKeys: dedupedKeys,
     googleCloudVisionKey: config.googleCloudVisionKey ?? env.GOOGLE_CLOUD_VISION_KEY,
     anthropicApiKey: config.anthropicApiKey ?? env.ANTHROPIC_API_KEY,
     vlmProvider: config.vlmProvider ?? 'gemini',
-    geminiModel: config.geminiModel ?? 'gemini-2.5-flash',
+    geminiModel: config.geminiModel ?? 'gemini-flash-lite-latest',
     claudeModel: config.claudeModel ?? 'claude-3-5-sonnet-20241022',
     defaultMode: config.defaultMode ?? 'standard',
     enableSemanticRelationships: config.enableSemanticRelationships ?? true,

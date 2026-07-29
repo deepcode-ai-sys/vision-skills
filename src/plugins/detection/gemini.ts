@@ -8,20 +8,29 @@
 import { BasePlugin } from '../base.js';
 import type { PluginType, RequestContext } from '../../core/types.js';
 import { analyzeCombined } from '../gemini/analyzer.js';
+import { GeminiKeyPool } from '../gemini/key-pool.js';
 
 export class GeminiDetectionPlugin extends BasePlugin {
   readonly name = 'gemini_detection';
   readonly pluginType: PluginType = 'detection';
   readonly provider = 'gemini';
   override readonly costEstimate = 0; // free tier
-  // gemini-2.5-flash uses reasoning and can take 10-20s; allow headroom.
-  override readonly timeoutMs = 30000;
+  // Orchestrator budget (total, across key rotation). flash-lite ~4-8s/call.
+  override readonly timeoutMs = 60000;
+  // Per-attempt fetch timeout. flash-lite dense-image calls ~4-8s; 20s headroom.
+  private readonly perAttemptTimeoutMs = 20000;
+
+  private keyPool: GeminiKeyPool;
 
   constructor(
-    private apiKey?: string,
-    private model = 'gemini-2.5-flash',
+    keys: string | string[] | GeminiKeyPool | undefined,
+    private model = 'gemini-flash-lite-latest',
   ) {
     super();
+    this.keyPool =
+      keys instanceof GeminiKeyPool
+        ? keys
+        : new GeminiKeyPool(typeof keys === 'string' ? [keys] : (keys ?? []));
   }
 
   protected async run(
@@ -30,11 +39,11 @@ export class GeminiDetectionPlugin extends BasePlugin {
   ): Promise<Record<string, unknown>> {
     // Shared single Gemini call (memoized per request) covers OCR + detection.
     const combined = await analyzeCombined(
-      this.apiKey!,
+      this.keyPool,
       this.model,
       image,
       context,
-      this.timeoutMs,
+      this.perAttemptTimeoutMs,
     );
     const objects = combined.objects;
     const overall =
@@ -43,6 +52,6 @@ export class GeminiDetectionPlugin extends BasePlugin {
   }
 
   async healthCheck(): Promise<boolean> {
-    return Boolean(this.apiKey);
+    return this.keyPool.hasKeys;
   }
 }

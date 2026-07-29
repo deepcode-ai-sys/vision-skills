@@ -2,37 +2,42 @@
  * Gemini VLM client (FREE tier).
  *
  * Implements the VLMClient interface for the semantic scene graph builder
- * and reasoner. Free at Google AI Studio.
+ * and reasoner. Free at Google AI Studio. Uses a key pool for rotation.
  */
 
-import { ProviderError } from '../../core/errors.js';
 import type { VLMClient } from '../../scene-graph/semantic.js';
 import { callGemini } from '../gemini/client.js';
+import { GeminiKeyPool } from '../gemini/key-pool.js';
 
 export class GeminiVLMClient implements VLMClient {
+  private keyPool: GeminiKeyPool;
+
   constructor(
-    private apiKey?: string,
-    private model = 'gemini-2.5-flash',
-  ) {}
+    keys: string | string[] | GeminiKeyPool | undefined,
+    private model = 'gemini-flash-lite-latest',
+  ) {
+    this.keyPool =
+      keys instanceof GeminiKeyPool
+        ? keys
+        : new GeminiKeyPool(typeof keys === 'string' ? [keys] : (keys ?? []));
+  }
 
   get available(): boolean {
-    return Boolean(this.apiKey);
+    return this.keyPool.hasKeys;
   }
 
   async askJson(image: Buffer, prompt: string, _maxTokens = 1024): Promise<string> {
-    if (!this.apiKey) {
-      throw new ProviderError('Gemini API key not configured', 'gemini');
-    }
     return callGemini({
-      apiKey: this.apiKey,
+      keyPool: this.keyPool,
       model: this.model,
       prompt,
       imageBase64: image.toString('base64'),
+      timeoutMs: 30000,
       jsonOutput: true,
     });
   }
 
   async healthCheck(): Promise<boolean> {
-    return Boolean(this.apiKey);
+    return this.keyPool.hasKeys;
   }
 }

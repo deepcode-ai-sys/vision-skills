@@ -8,20 +8,31 @@
 import { BasePlugin } from '../base.js';
 import type { PluginType, RequestContext } from '../../core/types.js';
 import { analyzeCombined } from '../gemini/analyzer.js';
+import { GeminiKeyPool } from '../gemini/key-pool.js';
 
 export class GeminiOCRPlugin extends BasePlugin {
   readonly name = 'gemini_ocr';
   readonly pluginType: PluginType = 'ocr';
   readonly provider = 'gemini';
   override readonly costEstimate = 0; // free tier
-  // gemini-2.5-flash uses reasoning and can take 10-20s; allow headroom.
-  override readonly timeoutMs = 30000;
+  // Orchestrator budget (total, across key rotation). flash-lite answers
+  // dense images in ~4-8s; budget covers several attempts during rotation.
+  override readonly timeoutMs = 60000;
+  // Per-attempt fetch timeout. flash-lite dense-image calls ~4-8s; 20s gives
+  // headroom. Rate-limited/bad keys fail fast (~200ms) and rotate instantly.
+  private readonly perAttemptTimeoutMs = 20000;
+
+  private keyPool: GeminiKeyPool;
 
   constructor(
-    private apiKey?: string,
-    private model = 'gemini-2.5-flash',
+    keys: string | string[] | GeminiKeyPool | undefined,
+    private model = 'gemini-flash-lite-latest',
   ) {
     super();
+    this.keyPool =
+      keys instanceof GeminiKeyPool
+        ? keys
+        : new GeminiKeyPool(typeof keys === 'string' ? [keys] : (keys ?? []));
   }
 
   protected async run(
@@ -30,11 +41,11 @@ export class GeminiOCRPlugin extends BasePlugin {
   ): Promise<Record<string, unknown>> {
     // Shared single Gemini call (memoized per request) covers OCR + detection.
     const combined = await analyzeCombined(
-      this.apiKey!,
+      this.keyPool,
       this.model,
       image,
       context,
-      this.timeoutMs,
+      this.perAttemptTimeoutMs,
     );
     const fullText = combined.textBlocks.map((b) => b.text).join('\n');
     return {
@@ -45,6 +56,6 @@ export class GeminiOCRPlugin extends BasePlugin {
   }
 
   async healthCheck(): Promise<boolean> {
-    return Boolean(this.apiKey);
+    return this.keyPool.hasKeys;
   }
 }

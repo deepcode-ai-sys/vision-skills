@@ -68,6 +68,7 @@ export { type VLMClient } from './scene-graph/semantic.js';
 export { GeminiOCRPlugin } from './plugins/ocr/gemini.js';
 export { GeminiDetectionPlugin } from './plugins/detection/gemini.js';
 export { GeminiVLMClient } from './plugins/vlm/gemini.js';
+export { GeminiKeyPool } from './plugins/gemini/key-pool.js';
 // Paid alternatives:
 export { GoogleVisionOCRPlugin } from './plugins/ocr/google-vision.js';
 export { GoogleVisionDetectionPlugin } from './plugins/detection/google-vision.js';

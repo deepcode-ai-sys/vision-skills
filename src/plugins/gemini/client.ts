@@ -12,6 +12,7 @@
  */
 
 import { ProviderError } from '../../core/errors.js';
+import type { GeminiKeyPool } from './key-pool.js';
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -28,7 +29,10 @@ export interface GeminiRetryOptions {
 }
 
 export interface GeminiCallOptions {
-  apiKey: string;
+  /** Single key. Ignored if `keyPool` is provided. */
+  apiKey?: string;
+  /** Optional key pool for rotation across many keys on 429. */
+  keyPool?: GeminiKeyPool;
   model: string;
   prompt: string;
   imageBase64: string;
@@ -63,12 +67,25 @@ function backoffDelay(
   return Math.min(exp + jitter, cap);
 }
 
+function parseRetryAfterMs(retryAfter: string | null): number | undefined {
+  if (!retryAfter) return undefined;
+  const asSeconds = Number(retryAfter);
+  if (!Number.isNaN(asSeconds)) return asSeconds * 1000;
+  const asDate = Date.parse(retryAfter);
+  if (!Number.isNaN(asDate)) return Math.max(0, asDate - Date.now());
+  return undefined;
+}
+
 /** Call Gemini generateContent with an image + prompt, return the text. */
 export async function callGemini(opts: GeminiCallOptions): Promise<string> {
-  const { apiKey, model, prompt, imageBase64, timeoutMs = 20000, jsonOutput } = opts;
-  const maxAttempts = opts.retry?.maxAttempts ?? 3;
+  const { keyPool, model, prompt, imageBase64, timeoutMs = 20000, jsonOutput } = opts;
   const baseDelay = opts.retry?.baseDelayMs ?? 500;
   const maxDelay = opts.retry?.maxDelayMs ?? 8000;
+
+  // With a key pool, allow enough attempts to cycle past bad/limited keys and
+  // reach a working one. Cap generously (pools can contain many dead keys).
+  const defaultAttempts = keyPool && keyPool.size > 1 ? Math.min(keyPool.size, 20) : 3;
+  const maxAttempts = opts.retry?.maxAttempts ?? defaultAttempts;
 
   const body: Record<string, unknown> = {
     contents: [
@@ -84,10 +101,16 @@ export async function callGemini(opts: GeminiCallOptions): Promise<string> {
     body.generationConfig = { responseMimeType: 'application/json' };
   }
 
-  const url = `${BASE}/${model}:generateContent?key=${apiKey}`;
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Pick a key: from the pool (rotating) or the single provided key.
+    const key = keyPool ? keyPool.next() : opts.apiKey;
+    if (!key) {
+      throw new ProviderError('No Gemini API key available', 'gemini');
+    }
+    const url = `${BASE}/${model}:generateContent?key=${key}`;
+
     let response: Response;
     try {
       response = await fetch(url, {
@@ -97,10 +120,13 @@ export async function callGemini(opts: GeminiCallOptions): Promise<string> {
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (err) {
-      // Network error / timeout — retryable
+      // Network error / timeout (e.g. a hanging key). Penalize so this key
+      // is deprioritized, then move on to another key immediately.
       lastError = err as Error;
+      keyPool?.penalize(key);
       if (attempt < maxAttempts - 1) {
-        await sleep(backoffDelay(attempt, baseDelay, maxDelay, null));
+        // With a pool, rotate right away (no long backoff); otherwise back off.
+        await sleep(keyPool ? 0 : backoffDelay(attempt, baseDelay, maxDelay, null));
         continue;
       }
       throw new ProviderError(
@@ -112,20 +138,34 @@ export async function callGemini(opts: GeminiCallOptions): Promise<string> {
 
     if (response.ok) {
       const result = (await response.json()) as Record<string, unknown>;
+      keyPool?.reward(key);
       return extractText(result);
     }
 
     const text = await response.text();
     const status = response.status;
+    const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
 
-    // Retry transient errors; fail fast on client errors (4xx except 429)
+    // Per-key failures with a key pool: 429 (rate limit), 404/403/400 (bad or
+    // unauthorized key). Penalize this key and rotate to another immediately.
+    // Rotation is the whole point of the pool — one bad key must not fail the
+    // request when other keys work.
+    const KEY_SPECIFIC = status === 429 || status === 404 || status === 403 || status === 400;
+    if (KEY_SPECIFIC && keyPool) {
+      // 404/403/400 = likely permanently bad key → long cooldown so we stop
+      // wasting attempts on it. 429 = transient rate limit → normal cooldown.
+      const cooldown = status === 429 ? retryAfterMs : 24 * 60 * 60 * 1000;
+      keyPool.penalize(key, cooldown);
+      lastError = new Error(`HTTP ${status} (key rotated): ${text.slice(0, 120)}`);
+      if (attempt < maxAttempts - 1) {
+        await sleep(keyPool.availableCount() > 0 ? 0 : Math.min(baseDelay, maxDelay));
+        continue;
+      }
+    }
+
+    // Other transient errors: exponential backoff on the same/next key.
     if (RETRYABLE_STATUS.has(status) && attempt < maxAttempts - 1) {
-      const delay = backoffDelay(
-        attempt,
-        baseDelay,
-        maxDelay,
-        response.headers.get('retry-after'),
-      );
+      const delay = backoffDelay(attempt, baseDelay, maxDelay, response.headers.get('retry-after'));
       lastError = new Error(`HTTP ${status}: ${text.slice(0, 200)}`);
       await sleep(delay);
       continue;

@@ -38,6 +38,20 @@ console.log(JSON.stringify(result, null, 2));
 
 Input can be a file path, URL, base64 data URI, or a `Buffer`.
 
+### Multiple keys (recommended for free tier)
+
+The Gemini free tier is rate-limited per key/project. Provide several keys and
+the built-in pool rotates automatically — skipping rate-limited or bad keys and
+preferring ones that just worked:
+
+```ts
+const vision = new VisionSkills({
+  geminiApiKeys: [process.env.GEMINI_KEY_1, process.env.GEMINI_KEY_2, /* ... */],
+});
+```
+
+Or via env (comma-separated): `GEMINI_API_KEYS=key1,key2,key3`.
+
 ### No API key at all? Use mock providers
 
 ```ts

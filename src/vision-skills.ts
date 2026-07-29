@@ -30,6 +30,7 @@ import { GeminiOCRPlugin } from './plugins/ocr/gemini.js';
 import { GeminiDetectionPlugin } from './plugins/detection/gemini.js';
 import { GeminiVLMClient } from './plugins/vlm/gemini.js';
 import { getGeminiImageType } from './plugins/gemini/analyzer.js';
+import { GeminiKeyPool } from './plugins/gemini/key-pool.js';
 import { GoogleVisionOCRPlugin } from './plugins/ocr/google-vision.js';
 import { GoogleVisionDetectionPlugin } from './plugins/detection/google-vision.js';
 import { RuleBasedUIPlugin } from './plugins/ui/rulebased.js';
@@ -54,6 +55,7 @@ export class VisionSkills {
   private normalizer: Normalizer;
   private cache: CacheManager;
   private vlm: VLMClient | null;
+  private geminiKeyPool: GeminiKeyPool;
 
   constructor(config: VisionSkillsConfig = {}) {
     this.config = resolveConfig(config);
@@ -71,6 +73,8 @@ export class VisionSkills {
       this.config.cacheEnabled,
       this.config.cacheTtlSeconds,
     );
+    // Single shared key pool for all Gemini plugins + VLM (rotation on 429).
+    this.geminiKeyPool = new GeminiKeyPool(this.config.geminiApiKeys);
     this.vlm = this.buildVlmClient();
     this.registerPlugins();
   }
@@ -219,8 +223,8 @@ export class VisionSkills {
     // Prefer explicit provider choice; else auto-pick whatever key exists.
     const provider = this.config.vlmProvider;
 
-    if (provider === 'gemini' && this.config.geminiApiKey) {
-      return new GeminiVLMClient(this.config.geminiApiKey, this.config.geminiModel);
+    if (provider === 'gemini' && this.geminiKeyPool.hasKeys) {
+      return new GeminiVLMClient(this.geminiKeyPool, this.config.geminiModel);
     }
     if (provider === 'claude' && this.config.anthropicApiKey) {
       const client = new ClaudeVLMClient(this.config.anthropicApiKey, this.config.claudeModel);
@@ -228,8 +232,8 @@ export class VisionSkills {
     }
 
     // Auto-fallback: free Gemini first, then Claude.
-    if (this.config.geminiApiKey) {
-      return new GeminiVLMClient(this.config.geminiApiKey, this.config.geminiModel);
+    if (this.geminiKeyPool.hasKeys) {
+      return new GeminiVLMClient(this.geminiKeyPool, this.config.geminiModel);
     }
     if (this.config.anthropicApiKey) {
       const client = new ClaudeVLMClient(this.config.anthropicApiKey, this.config.claudeModel);
@@ -247,10 +251,12 @@ export class VisionSkills {
     }
 
     // FREE tier first: Gemini covers OCR + detection (priority 0).
-    if (this.config.geminiApiKey) {
-      this.orchestrator.register(new GeminiOCRPlugin(this.config.geminiApiKey, this.config.geminiModel));
+    // Both plugins share ONE key pool so rate-limited keys are skipped
+    // consistently across OCR and detection.
+    if (this.geminiKeyPool.hasKeys) {
+      this.orchestrator.register(new GeminiOCRPlugin(this.geminiKeyPool, this.config.geminiModel));
       this.orchestrator.register(
-        new GeminiDetectionPlugin(this.config.geminiApiKey, this.config.geminiModel),
+        new GeminiDetectionPlugin(this.geminiKeyPool, this.config.geminiModel),
       );
     }
 
