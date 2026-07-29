@@ -74,5 +74,39 @@ describe('parseCombined (OCR + detection in one response)', () => {
     const result = parseCombined('{"text_blocks":[{"text":"A","box_2d":[0,0,50,50]}]}', 100, 100);
     expect(result.textBlocks).toHaveLength(1);
     expect(result.objects).toHaveLength(0);
+    expect(result.tables).toHaveLength(0);
+  });
+
+  it('extracts structured tables', () => {
+    const raw = JSON.stringify({
+      text_blocks: [],
+      objects: [],
+      tables: [
+        {
+          title: 'RECENT REQUESTS',
+          columns: ['Model', 'In / Out', 'When'],
+          rows: [
+            ['claude-opus', '574 / 140', '8s ago'],
+            ['claude-opus', '514 / 419', '17s ago'],
+          ],
+          box_2d: [100, 200, 500, 800],
+        },
+      ],
+    });
+    const result = parseCombined(raw, 1000, 1000);
+    expect(result.tables).toHaveLength(1);
+    expect(result.tables[0]!.title).toBe('RECENT REQUESTS');
+    expect(result.tables[0]!.columns).toEqual(['Model', 'In / Out', 'When']);
+    expect(result.tables[0]!.rows).toHaveLength(2);
+    expect(result.tables[0]!.rows[0]).toEqual(['claude-opus', '574 / 140', '8s ago']);
+  });
+
+  it('drops empty tables', () => {
+    const raw = JSON.stringify({
+      text_blocks: [],
+      objects: [],
+      tables: [{ title: 'empty', columns: [], rows: [] }],
+    });
+    expect(parseCombined(raw, 100, 100).tables).toHaveLength(0);
   });
 });

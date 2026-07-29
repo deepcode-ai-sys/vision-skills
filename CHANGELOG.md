@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Structured table extraction.** The analyzer now recognizes tables/lists
+  (dashboards, invoices, logs) and extracts them into `tables[]` with title,
+  columns, and rows — instead of only scattered text blocks. Verified live on
+  a real dashboard: the "Recent Requests" table was extracted as 3 columns ×
+  13 rows. This is a key differentiator from a single generic model call.
+- **Deeper analysis prompt.** The Gemini prompt now instructs exhaustive
+  reading (small text, number+unit pairs, every label/status/timestamp) and
+  table extraction, making analysis meaningfully deeper than "extract text".
 - **Multi-key rotation (`GeminiKeyPool`).** Provide many Gemini keys via
   `geminiApiKeys: [...]` (or `GEMINI_API_KEYS` env, comma-separated). The pool
   rotates keys automatically: rate-limited (429) or bad (404/403/400) keys are

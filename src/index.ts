@@ -36,6 +36,7 @@ export {
   type SemanticRelation,
   type ImageInput,
   type Entity,
+  type Table,
   type SceneGraph,
   type SpatialRelationEdge,
   type SemanticRelationEdge,

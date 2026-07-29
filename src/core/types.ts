@@ -253,6 +253,17 @@ export interface ReasonerOutput {
 }
 
 // ============================================================================
+// Tables (structured extraction from dashboards, invoices, spreadsheets)
+// ============================================================================
+
+export interface Table {
+  title: string | null;
+  columns: string[];
+  rows: string[][];
+  bbox?: BoundingBox;
+}
+
+// ============================================================================
 // Final response
 // ============================================================================
 
@@ -261,6 +272,7 @@ export interface VisionResponse {
   imageType: ImageType;
   modeUsed: ProcessingMode;
   entities: Entity[];
+  tables: Table[];
   sceneGraph: SceneGraph;
   reasonerOutput: ReasonerOutput | null;
   providerResults: PluginResult[];

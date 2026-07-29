@@ -54,6 +54,14 @@ async function main() {
     }
     console.log(`spatial edges: ${result.sceneGraph.spatial.length}`);
     console.log(`semantic edges: ${result.sceneGraph.semantic.length}`);
+    console.log(`tables: ${result.tables?.length ?? 0}`);
+    for (const t of result.tables ?? []) {
+      console.log(`  table "${t.title ?? '(untitled)'}" cols=[${t.columns.join(', ')}] rows=${t.rows.length}`);
+      for (const row of t.rows.slice(0, 3)) {
+        console.log(`    | ${row.join(' | ')}`);
+      }
+      if (t.rows.length > 3) console.log(`    ... +${t.rows.length - 3} more rows`);
+    }
     for (const s of result.sceneGraph.semantic) {
       console.log(`  * ${s.subjectId} ${s.relation} ${s.objectId} (${s.confidence})`);
     }

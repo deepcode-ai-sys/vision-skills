@@ -14,10 +14,12 @@ import { ProviderOrchestrator } from './core/orchestrator.js';
 import { ModeRouter } from './core/router.js';
 import {
   SCHEMA_VERSION,
+  BoundingBox,
   type ImageInput,
   type ProcessingMode,
   type RequestContext,
   type SceneGraph,
+  type Table,
   type VisionResponse,
 } from './core/types.js';
 import { Normalizer } from './normalizers/normalizer.js';
@@ -29,7 +31,7 @@ import type { VisionPlugin } from './plugins/base.js';
 import { GeminiOCRPlugin } from './plugins/ocr/gemini.js';
 import { GeminiDetectionPlugin } from './plugins/detection/gemini.js';
 import { GeminiVLMClient } from './plugins/vlm/gemini.js';
-import { getGeminiImageType } from './plugins/gemini/analyzer.js';
+import { getGeminiImageType, getGeminiTables } from './plugins/gemini/analyzer.js';
 import { GeminiKeyPool } from './plugins/gemini/key-pool.js';
 import { GoogleVisionOCRPlugin } from './plugins/ocr/google-vision.js';
 import { GoogleVisionDetectionPlugin } from './plugins/detection/google-vision.js';
@@ -136,6 +138,15 @@ export class VisionSkills {
     const geminiType = await getGeminiImageType(context);
     const effectiveType = geminiType ?? classification.type;
 
+    // Structured tables extracted by the deep analyzer (if any).
+    const rawTables = await getGeminiTables(context);
+    const tables: Table[] = rawTables.map((t) => ({
+      title: t.title,
+      columns: t.columns,
+      rows: t.rows,
+      bbox: t.box_2d ? BoundingBox.fromList(t.box_2d) : undefined,
+    }));
+
     // 7. Spatial scene graph (all modes)
     const spatialBuilder = new SpatialGraphBuilder(width, height, {
       thresholdX: this.config.spatialThresholdX,
@@ -189,6 +200,7 @@ export class VisionSkills {
       imageType: effectiveType,
       modeUsed: mode,
       entities,
+      tables,
       sceneGraph,
       reasonerOutput,
       providerResults: pluginResults,
