@@ -1,15 +1,12 @@
 # vision-skills
 
-Turn images into **structured JSON** for AI models that can't read images (or read them poorly). Cloud-only, multi-provider, plugin-based. No GPU required.
+Converts images into structured JSON for LLMs and agents. Provides OCR, object detection, table extraction, UI-aware analysis, and scene graph reasoning via a cloud-backed vision pipeline with local preprocessing.
 
-Give a text-only LLM (or a weak-vision model) a rich, structured description of any image: detected objects, OCR text, UI elements, spatial relationships, semantic relationships, and reasoning — all in one consistent JSON schema.
+## Use cases
 
-> **Status: early (0.1.0).** Core pipeline and providers are implemented,
-> unit-tested (61 tests), and verified end-to-end against the live Gemini API
-> on real screenshots: OCR (incl. Vietnamese), object detection with bounding
-> boxes, table extraction (rows/columns), text styling (color/emphasis), scene
-> graph, semantic relationships, and reasoning. Still early — see
-> [Limitations](#limitations) before production use.
+- **Screenshot/UI analysis** — extract text, buttons, menus, tables, and hierarchy from any screen
+- **Document/table extraction** — invoices, dashboards, logs → structured rows and columns
+- **Agent tooling for text-only models** — MCP/CLI/REST/SDK bridge between images and LLMs without vision
 
 ## Install
 
@@ -17,88 +14,48 @@ Give a text-only LLM (or a weak-vision model) a rich, structured description of 
 npm install vision-skills
 ```
 
-`sharp` is bundled. `fastify` is an optional peer dependency (only if you use the server).
+`sharp` is bundled. `fastify` is an optional peer dependency (server only).
 
-## Quick start (SDK) — FREE
-
-The default provider is **Google Gemini**, which has a free tier (Google AI
-Studio, **no credit card**). One key covers OCR, object detection with
-bounding boxes, semantic relationships, and reasoning.
-
-Get a free key at https://aistudio.google.com/apikey
+## Getting started
 
 ```ts
 import { VisionSkills } from 'vision-skills';
 
-const vision = new VisionSkills({
-  geminiApiKey: process.env.GEMINI_API_KEY, // free tier
-});
-
-const result = await vision.analyze('./screenshot.png', { mode: 'standard' });
+const vision = new VisionSkills({ geminiApiKey: process.env.GEMINI_API_KEY });
+const result = await vision.analyze('./screenshot.png');
 console.log(JSON.stringify(result, null, 2));
 ```
 
-Input can be a file path, URL, base64 data URI, or a `Buffer`.
+Input: file path, URL, base64 data URI, or Buffer.
 
-### Multiple keys (recommended for free tier)
+### Provider options
 
-The Gemini free tier is rate-limited per key/project. Provide several keys and
-the built-in pool rotates automatically — skipping rate-limited or bad keys and
-preferring ones that just worked:
+| Provider | Cost | Key needed | Covers |
+|----------|------|------------|--------|
+| **Gemini** (default) | Free tier | `geminiApiKey` | OCR + detection + semantic + reasoning |
+| **Google Cloud Vision** | Paid | `googleCloudVisionKey` | OCR + detection |
+| **Claude** | Paid | `anthropicApiKey` | Semantic + reasoning (VLM) |
+| **Mock** | Free | none | Testing without API |
+| **Rule-based UI** (local) | Free | none | UI element detection (always on) |
 
-```ts
-const vision = new VisionSkills({
-  geminiApiKeys: [process.env.GEMINI_KEY_1, process.env.GEMINI_KEY_2, /* ... */],
-});
-```
+Provider priority: Gemini → Google/Claude → mock. Local UI detection is always active.
 
-Or via env (comma-separated): `GEMINI_API_KEYS=key1,key2,key3`.
+### Free tier notes
 
-### Deep reading for dense images
-
-For large/dense images (dashboards, documents packed with small text), enable
-deep analysis. It tiles the image, reads each region thoroughly, and merges —
-catching small text a single pass misses (tested: ~41-95 blocks → ~140-210
-blocks on a real dashboard). Costs more API calls per image so it's opt-in:
-
-```ts
-const vision = new VisionSkills({
-  geminiApiKeys: [...],
-  analysisDepth: 'deep', // default: 'fast' (single pass)
-});
-```
-
-### No API key at all? Use mock providers
-
-```ts
-const vision = new VisionSkills({ useMockProviders: true });
-const result = await vision.analyze(imageBuffer, { mode: 'standard' });
-```
-
-### Paid providers (optional, higher quality / throughput)
-
-```ts
-const vision = new VisionSkills({
-  googleCloudVisionKey: process.env.GOOGLE_CLOUD_VISION_KEY, // OCR + detection
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY,            // Claude VLM
-});
-```
-
-Provider priority: free **Gemini** is tried first; paid providers act as
-fallbacks. Local UI detection is always on and always free.
+- Gemini free tier: available at https://aistudio.google.com/apikey (no credit card)
+- Rate-limited per key; provide multiple keys via `geminiApiKeys[]` or `GEMINI_API_KEYS` env for automatic rotation
+- Mock providers (`useMockProviders: true`) let you test without any key
 
 ## Processing modes
 
-Modes trade cost for detail. The VLM (expensive) only runs in `advanced`/`full`.
+| Mode | Runs | Best for |
+|------|------|----------|
+| `basic` | OCR only | Quick text extraction |
+| `standard` | OCR + detection + UI | Most images, screenshots |
+| `advanced` | + semantic graph + reasoner | Rich scene understanding |
+| `full` | Everything | Maximum detail |
 
-| Mode | Providers | VLM? | Use for |
-|------|-----------|------|---------|
-| `basic` | OCR | no | Fast text extraction |
-| `standard` | OCR + detection + UI | no | Most images, screenshots |
-| `advanced` | + semantic graph + reasoner | yes | Rich real-world analysis |
-| `full` | everything | yes | Maximum detail |
-
-If you don't pass a `mode`, the image classifier picks one automatically.
+Mode auto-selects from image type when omitted.
 
 ## Output shape
 
@@ -106,147 +63,91 @@ If you don't pass a `mode`, the image classifier picks one automatically.
 {
   "schemaVersion": "3.1.0",
   "imageType": "screen_ui",
-  "modeUsed": "standard",
   "entities": [
     { "entityId": "e1", "label": "text_block", "bbox": [120,340,180,370],
       "confidence": 0.98, "text": "Login",
-      "metadata": { "language": "en", "color": "#ffffff", "emphasis": "heading" },
-      "sourcePlugins": ["gemini_ocr"] }
+      "metadata": { "language": "en", "color": "#ffffff", "emphasis": "heading" } }
   ],
-  "tables": [
-    { "title": "RECENT REQUESTS", "columns": ["Model","In/Out","When"],
-      "rows": [["claude-opus","574↑ 140↓","8s ago"]] }
-  ],
-  "code": { "language": "python", "functions": ["render_video"],
-            "errors": ["TypeError: ..."], "snippet": "def render_video():" },
-  "sceneGraph": {
-    "spatial": [{ "subjectId": "e1", "relation": "above", "objectId": "e2", "confidence": 1 }],
-    "semantic": []
-  },
-  "reasonerOutput": { "summary": "Login page", "actionHints": [...], "anomalies": [...] },
-  "providerResults": [ /* per-provider details */ ],
-  "costActualTotal": 0.003,
-  "latencyMsTotal": 210.5
+  "tables": [ /* structured rows/columns from dashboards, invoices */ ],
+  "code": { "language": "python", "functions": ["render_video"], "errors": ["TypeError"] },
+  "sceneGraph": { "spatial": [ { "subjectId": "e1", "relation": "above", "objectId": "e2" } ] },
+  "reasonerOutput": { "summary": "...", "actionHints": [], "anomalies": [] }
 }
 ```
 
-## Optional REST server
+Full schema: `src/core/types.ts` in the repo.
 
-Requires `fastify` (`npm install fastify`).
+## Tiled analysis for dense images
 
-```ts
-import { createServer } from 'vision-skills/server';
+Large screenshots (dashboards, documents) can miss small text in a single pass. Enable `analysisDepth: 'deep'` to split the image into overlapping tiles, read each region at higher resolution, and merge. Single-pass reads ~40-95 text blocks; tiled reads ~140-210.
 
-const app = await createServer({
-  config: { googleCloudVisionKey: process.env.GOOGLE_CLOUD_VISION_KEY },
-});
-await app.listen({ port: 8000 });
-```
+## Multi-key rotation
 
-Or attach to your own Fastify app:
+Multiple Gemini keys share request load. Rate-limited keys cool down; successful keys are preferred. Configure via array or comma-separated env:
 
 ```ts
-import Fastify from 'fastify';
-import { registerRoutes } from 'vision-skills/server';
-
-const app = Fastify();
-registerRoutes(app, { config: { /* ... */ } });
+const vision = new VisionSkills({ geminiApiKeys: ["key1", "key2", "key3"] });
 ```
 
-Endpoints: `POST /v1/analyze`, `GET /health`, `GET /v1/health/providers`, `GET /v1/cache/stats`.
+## Built-in providers
 
-## Custom providers
+- **Gemini** (free) — OCR, object detection, semantic relationships, reasoning
+- **Rule-based UI** (local, free) — UI element detection via edge detection
+- **Google Cloud Vision** (paid) — OCR, object detection
+- **Claude** (paid) — semantic relationships, reasoning (VLM)
 
-Implement `VisionPlugin` (or extend `BasePlugin`) and register it:
+## MCP / CLI / REST / SDK
 
-```ts
-import { VisionSkills, BasePlugin, type PluginType, type RequestContext } from 'vision-skills';
+| Interface | Use when |
+|-----------|----------|
+| **MCP server** (`vision-skills-mcp`) | AI assistants (OpenCode, Claude Code, Cursor, Continue, Copilot, VS Code, Cline...) |
+| **CLI** (`vision-skills analyze`) | Terminal, scripts, CI pipelines |
+| **REST** (`vision-skills serve`) | Non-Node apps (Python, Go, PHP...) |
+| **SDK** (`new VisionSkills()`) | Node.js apps |
 
-class MyOCR extends BasePlugin {
-  readonly name = 'my_ocr';
-  readonly pluginType: PluginType = 'ocr';
-  readonly provider = 'my-provider';
-
-  protected async run(image: Buffer, ctx: RequestContext) {
-    // call your API, return { confidence, text_blocks: [...] }
-    return { confidence: 0.9, text_blocks: [] };
-  }
-  async healthCheck() { return true; }
-}
-
-const vision = new VisionSkills({ /* ... */ });
-vision.registerPlugin(new MyOCR());
-```
-
-The orchestrator runs providers of the same type with automatic fallback and a circuit breaker.
+See [SKILL.md](SKILL.md) for per-platform MCP configuration. Setup scripts: `setup-integrations.bat` (Windows) and `setup-integrations.sh` (macOS/Linux).
 
 ## Configuration
 
 ```ts
 new VisionSkills({
-  geminiApiKey: '...',        // free tier (default provider)
-  googleCloudVisionKey: '...', // optional paid
-  anthropicApiKey: '...',      // optional paid
-  vlmProvider: 'gemini',       // 'gemini' (free) | 'claude'
-  geminiModel: 'gemini-flash-lite-latest',
-  defaultMode: 'standard',
-  enableSemanticRelationships: true,
-  enableReasoner: true,
-  maxImageSizeMb: 10,
-  maxDimension: 2048,
-  jpegQuality: 85,
+  geminiApiKey: '...',           // free tier (default)
+  geminiApiKeys: ['...', '...'], // multiple keys for rotation
+  googleCloudVisionKey: '...',   // optional paid
+  anthropicApiKey: '...',        // optional paid
+  vlmProvider: 'gemini',
+  analysisDepth: 'fast',         // 'fast' | 'deep'
   cacheEnabled: true,
-  cacheTtlSeconds: 3600,
   useMockProviders: false,
 });
 ```
 
-All fields are optional. API keys fall back to `GEMINI_API_KEY`,
-`GOOGLE_CLOUD_VISION_KEY`, and `ANTHROPIC_API_KEY` env vars.
+All fields optional. Keys also read from `GEMINI_API_KEY`, `GEMINI_API_KEYS`, `GOOGLE_CLOUD_VISION_KEY`, `ANTHROPIC_API_KEY` env vars.
 
-## Built-in providers
+## Security
 
-**Free (default):**
-- **Gemini** — OCR + object detection (with bounding boxes) + semantic + reasoning. Free tier, no credit card.
-- **Rule-based UI** — local, no API cost, rectangle/UI element detection.
+- URL inputs are checked against SSRF (localhost / private / reserved IPs blocked)
+- Uploaded bytes validated by magic bytes, not extension
+- Images resized before sending to providers
 
-**Paid (optional fallbacks):**
-- **Google Cloud Vision** — OCR (`DOCUMENT_TEXT_DETECTION`) + object detection (`OBJECT_LOCALIZATION`)
-- **Claude Vision** — semantic relationships + reasoning
+## Current limitations
 
-## Security notes
+- **Gemini verified live; Google Cloud Vision and Claude are fixture-tested only.**
+- **Free tier rate-limited.** Multi-key rotation mitigates this, but production volumes may need paid tiers.
+- **Classifier is heuristic.** Image-type classification uses image statistics, not a trained model.
+- **Segmentation, face, pose not implemented.** These are on the roadmap and skip gracefully if absent.
+- **Cache is in-memory.** Provide a Redis-backed `CacheBackend` for multi-instance deployments.
+- **REST server auth/rate limiting** are minimal. Add your own layer for public deployments.
 
-- URL inputs are checked against SSRF (localhost / private / reserved IPs are blocked).
-- Uploaded bytes are validated by magic bytes, not just extension.
-- Images are resized before being sent to providers to reduce token cost.
+## Roadmap
 
-## Limitations
-
-This is an early release. Be aware of the following before relying on it:
-
-- **Gemini verified; other providers not yet.** The Gemini path (OCR +
-  detection) is verified end-to-end against the live API. Google Cloud Vision
-  and Claude parsing are covered by fixture-based unit tests but have not been
-  validated against their live APIs — test with a real key before relying on
-  them.
-- **Gemini free tier is rate-limited.** Expect `429` under load; the built-in
-  key pool rotates across multiple keys, but for volume you may need a paid
-  tier or a fallback provider. `gemini-flash-lite-latest` is the default
-  (fast, ~4-8s per call) — switch to `gemini-2.5-flash` for deeper reasoning
-  (slower, lower free quota).
-- **Classifier is heuristic.** Image-type classification uses simple image
-  statistics, not a trained model. A CLIP-based layer is planned.
-- **Segmentation / face / pose are not implemented.** `advanced` mode
-  currently runs OCR + detection + UI + VLM; dedicated segmentation, face, and
-  pose providers are on the roadmap and skip gracefully if absent.
-- **Cache is in-memory by default.** For multi-instance deployments, provide a
-  Redis-backed `CacheBackend`.
-- **Rate limiting / auth** for the REST server are minimal; add your own layer
-  for public deployments.
+- Segmentation, face, and pose providers
+- CLIP-based classifier (replaces heuristic)
+- Redis cache backend
+- Production auth/rate limiting
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
 MIT
-
