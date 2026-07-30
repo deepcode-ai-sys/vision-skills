@@ -1,4 +1,4 @@
-# Contributing to Vision Skills
+﻿# Contributing to Vision Skills
 
 Thanks for your interest in contributing. This project turns images into
 structured JSON for text-only AI models, using a plugin-based, cloud-only
@@ -16,23 +16,23 @@ npm test
 
 ## Scripts
 
-- `npm run build` — compile TypeScript to `dist/`
-- `npm test` — run the test suite (vitest)
-- `npm run typecheck` — type-check without emitting
-- `npm run lint` — lint with ESLint
+- `npm run build` â€” compile TypeScript to `dist/`
+- `npm test` â€” run the test suite (vitest)
+- `npm run typecheck` â€” type-check without emitting
+- `npm run lint` â€” lint with ESLint
 
 ## Project structure
 
 ```
 src/
-├── core/          types, errors, classifier, router, orchestrator
-├── plugins/       provider plugins (gemini, google-vision, claude, ui, mock)
-├── normalizers/   unify provider outputs into entities
-├── scene-graph/   spatial (geometry) + semantic (VLM) relationships
-├── reasoner/      VLM-based reasoning (advanced/full modes)
-├── cache/         response caching
-├── utils/         image loading/preprocessing
-└── server/        optional Fastify REST server
+â”œâ”€â”€ core/          types, errors, classifier, router, orchestrator
+â”œâ”€â”€ plugins/       provider plugins (gemini, google-vision, ui, mock)
+â”œâ”€â”€ normalizers/   unify provider outputs into entities
+â”œâ”€â”€ scene-graph/   spatial (geometry) + semantic (VLM) relationships
+â”œâ”€â”€ reasoner/      VLM-based reasoning (advanced/full modes)
+â”œâ”€â”€ cache/         response caching
+â”œâ”€â”€ utils/         image loading/preprocessing
+â””â”€â”€ server/        optional Fastify REST server
 ```
 
 ## Adding a new provider
@@ -56,7 +56,7 @@ See `examples/custom-plugin.ts` for a working example.
 - Keep the core provider-agnostic. Provider specifics stay in plugins.
 - All outputs must conform to the unified schema (v3.1.0).
 - Prefer free/local options as defaults where quality allows.
-- Add tests for parsing logic — do not rely on live API calls in CI.
+- Add tests for parsing logic â€” do not rely on live API calls in CI.
 - Run `npm run lint && npm run typecheck && npm test` before opening a PR.
 
 ## Reporting bugs

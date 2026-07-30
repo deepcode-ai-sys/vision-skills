@@ -9,7 +9,7 @@
  *
  * const vision = new VisionSkills({
  *   googleCloudVisionKey: process.env.GOOGLE_CLOUD_VISION_KEY,
- *   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  *   googleCloudVisionKey: process.env.GOOGLE_CLOUD_VISION_KEY,
  * });
  *
  * const result = await vision.analyze('./screenshot.png', { mode: 'standard' });
@@ -71,10 +71,9 @@ export { GeminiOCRPlugin } from './plugins/ocr/gemini.js';
 export { GeminiDetectionPlugin } from './plugins/detection/gemini.js';
 export { GeminiVLMClient } from './plugins/vlm/gemini.js';
 export { GeminiKeyPool } from './plugins/gemini/key-pool.js';
-// Paid alternatives:
+ // Paid alternatives:
 export { GoogleVisionOCRPlugin } from './plugins/ocr/google-vision.js';
 export { GoogleVisionDetectionPlugin } from './plugins/detection/google-vision.js';
-export { ClaudeVLMClient } from './plugins/vlm/claude.js';
 // Local (free):
 export { RuleBasedUIPlugin } from './plugins/ui/rulebased.js';
 export { MockOCRPlugin, MockDetectionPlugin, MockUIPlugin } from './plugins/mock.js';

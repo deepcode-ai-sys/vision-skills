@@ -37,7 +37,6 @@ import { GoogleVisionOCRPlugin } from './plugins/ocr/google-vision.js';
 import { GoogleVisionDetectionPlugin } from './plugins/detection/google-vision.js';
 import { RuleBasedUIPlugin } from './plugins/ui/rulebased.js';
 import { MockOCRPlugin, MockDetectionPlugin, MockUIPlugin } from './plugins/mock.js';
-import { ClaudeVLMClient } from './plugins/vlm/claude.js';
 
 const VLM_MODES: ReadonlySet<ProcessingMode> = new Set(['advanced', 'full']);
 
@@ -236,24 +235,8 @@ export class VisionSkills {
   // ------------------------------------------------------------- internal
 
   private buildVlmClient(): VLMClient | null {
-    // Prefer explicit provider choice; else auto-pick whatever key exists.
-    const provider = this.config.vlmProvider;
-
-    if (provider === 'gemini' && this.geminiKeyPool.hasKeys) {
-      return new GeminiVLMClient(this.geminiKeyPool, this.config.geminiModel);
-    }
-    if (provider === 'claude' && this.config.anthropicApiKey) {
-      const client = new ClaudeVLMClient(this.config.anthropicApiKey, this.config.claudeModel);
-      return client.available ? client : null;
-    }
-
-    // Auto-fallback: free Gemini first, then Claude.
     if (this.geminiKeyPool.hasKeys) {
       return new GeminiVLMClient(this.geminiKeyPool, this.config.geminiModel);
-    }
-    if (this.config.anthropicApiKey) {
-      const client = new ClaudeVLMClient(this.config.anthropicApiKey, this.config.claudeModel);
-      return client.available ? client : null;
     }
     return null;
   }

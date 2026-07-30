@@ -13,12 +13,10 @@ export interface VisionSkillsConfig {
   /** Multiple Gemini keys for rotation (bypasses per-key free-tier limits). */
   geminiApiKeys?: string[];
   googleCloudVisionKey?: string; // paid
-  anthropicApiKey?: string; // paid
 
   // VLM
-  vlmProvider?: 'gemini' | 'claude';
+  vlmProvider?: 'gemini';
   geminiModel?: string;
-  claudeModel?: string;
 
   // Behavior
   defaultMode?: ProcessingMode;
@@ -55,12 +53,11 @@ export interface VisionSkillsConfig {
 }
 
 export interface ResolvedConfig extends Required<Omit<VisionSkillsConfig,
-  'geminiApiKey' | 'geminiApiKeys' | 'googleCloudVisionKey' | 'anthropicApiKey'>> {
+  'geminiApiKey' | 'geminiApiKeys' | 'googleCloudVisionKey'>> {
   geminiApiKey?: string;
   /** Resolved, de-duplicated list of all Gemini keys (single + array + env). */
   geminiApiKeys: string[];
   googleCloudVisionKey?: string;
-  anthropicApiKey?: string;
 }
 
 export function resolveConfig(config: VisionSkillsConfig = {}): ResolvedConfig {
@@ -85,10 +82,8 @@ export function resolveConfig(config: VisionSkillsConfig = {}): ResolvedConfig {
     geminiApiKey: dedupedKeys[0],
     geminiApiKeys: dedupedKeys,
     googleCloudVisionKey: config.googleCloudVisionKey ?? env.GOOGLE_CLOUD_VISION_KEY,
-    anthropicApiKey: config.anthropicApiKey ?? env.ANTHROPIC_API_KEY,
-    vlmProvider: config.vlmProvider ?? 'gemini',
+    vlmProvider: 'gemini',
     geminiModel: config.geminiModel ?? 'gemini-flash-lite-latest',
-    claudeModel: config.claudeModel ?? 'claude-3-5-sonnet-20241022',
     defaultMode: config.defaultMode ?? 'standard',
     enableSemanticRelationships: config.enableSemanticRelationships ?? true,
     enableReasoner: config.enableReasoner ?? true,

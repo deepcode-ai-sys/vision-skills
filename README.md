@@ -1,12 +1,12 @@
-# vision-skills
+﻿# vision-skills
 
 Converts images into structured JSON for LLMs and agents. Provides OCR, object detection, table extraction, UI-aware analysis, and scene graph reasoning via a cloud-backed vision pipeline with local preprocessing.
 
 ## Use cases
 
-- **Screenshot/UI analysis** — extract text, buttons, menus, tables, and hierarchy from any screen
-- **Document/table extraction** — invoices, dashboards, logs → structured rows and columns
-- **Agent tooling for text-only models** — MCP/CLI/REST/SDK bridge between images and LLMs without vision
+- **Screenshot/UI analysis** â€” extract text, buttons, menus, tables, and hierarchy from any screen
+- **Document/table extraction** â€” invoices, dashboards, logs â†’ structured rows and columns
+- **Agent tooling for text-only models** â€” MCP/CLI/REST/SDK bridge between images and LLMs without vision
 
 ## Install
 
@@ -34,11 +34,11 @@ Input: file path, URL, base64 data URI, or Buffer.
 |----------|------|------------|--------|
 | **Gemini** (default) | Free tier | `geminiApiKey` | OCR + detection + semantic + reasoning |
 | **Google Cloud Vision** | Paid | `googleCloudVisionKey` | OCR + detection |
-| **Claude** | Paid | `anthropicApiKey` | Semantic + reasoning (VLM) |
+| **Gemini** (free, built-in) | Free | â€” | OCR + detection + semantic + reasoning |
 | **Mock** | Free | none | Testing without API |
 | **Rule-based UI** (local) | Free | none | UI element detection (always on) |
 
-Provider priority: Gemini → Google/Claude → mock. Local UI detection is always active.
+Provider priority: Gemini â†’ Google/Gemini â†’ mock. Local UI detection is always active.
 
 ### Free tier notes
 
@@ -91,10 +91,10 @@ const vision = new VisionSkills({ geminiApiKeys: ["key1", "key2", "key3"] });
 
 ## Built-in providers
 
-- **Gemini** (free) — OCR, object detection, semantic relationships, reasoning
-- **Rule-based UI** (local, free) — UI element detection via edge detection
-- **Google Cloud Vision** (paid) — OCR, object detection
-- **Claude** (paid) — semantic relationships, reasoning (VLM)
+- **Gemini** (free) â€” OCR, object detection, semantic relationships, reasoning
+- **Rule-based UI** (local, free) â€” UI element detection via edge detection
+- **Google Cloud Vision** (paid) â€” OCR, object detection
+
 
 ## MCP / CLI / REST / SDK
 
@@ -132,7 +132,7 @@ All fields optional. Keys also read from `GEMINI_API_KEY`, `GEMINI_API_KEYS`, `G
 
 ## Current limitations
 
-- **Gemini verified live; Google Cloud Vision and Claude are fixture-tested only.**
+- **Gemini verified live; Google Cloud Vision are fixture-tested only only.**
 - **Free tier rate-limited.** Multi-key rotation mitigates this, but production volumes may need paid tiers.
 - **Classifier is heuristic.** Image-type classification uses image statistics, not a trained model.
 - **Segmentation, face, pose not implemented.** These are on the roadmap and skip gracefully if absent.
@@ -146,7 +146,7 @@ All fields optional. Keys also read from `GEMINI_API_KEY`, `GEMINI_API_KEYS`, `G
 - Redis cache backend
 - Production auth/rate limiting
 
-Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions welcome â€” see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
