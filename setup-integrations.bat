@@ -107,8 +107,15 @@ if exist ".\SKILL.md" (
 set CFG=%USERPROFILE%\.config\opencode\opencode.json
 if not exist "%CFG%" (
     call :MAKE_JSON "%CFG%" "{ \"mcp\": { \"vision-skills\": { \"type\": \"local\", \"command\": [\"npx\", \"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+    echo  + Config created at %CFG%
 ) else (
-    echo  + File exists. Them MCP config thu cong.
+    echo  + File exists. Add this to your opencode.json:
+    echo.
+    echo  { "mcp": { "vision-skills": {
+    echo    "type": "local",
+    echo    "command": ["npx", "vision-skills-mcp"],
+    echo    "env": { "GEMINI_API_KEYS": "%GEMINI_KEY%" }
+    echo  } } }
 )
 echo  + Done!
 pause
