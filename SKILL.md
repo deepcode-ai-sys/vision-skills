@@ -7,17 +7,21 @@ description: "Use when the user asks you to analyze, describe, read, or extract 
 
 You have MCP tools available to analyze images. When the user asks about an image, call the appropriate tool. The tool reads the image, extracts structured data via Gemini, and returns it as JSON. You read the JSON and answer the user — no need to process image pixels yourself.
 
+If the user pastes an image (or mentions an image they see), call `clipboard()` first to get the image data, then pass it to `analyze()`.
+
 ```
 User: "What's in this image?"
-  → Call MCP tool: analyze("/path/to/image.jpg")
-  → Tool returns JSON with text, objects, tables, colors, relationships
-  → You read the JSON and answer the user
+  → Call MCP tool: clipboard()
+  → Tool returns base64 data
+  → Call analyze(image: base64_data)
+  → Read JSON → answer the user
 ```
 
 ## Available tools
 
 | Tool | Description |
 |------|-------------|
+| `clipboard()` | Read image from system clipboard (call this first when user mentions an image without a file) |
 | `analyze(image, mode?, depth?)` | Return full structured JSON |
 | `analyze_text(image, mode?)` | Return plain-text summary (easier for LLMs to consume) |
 | `health()` | Check if API is configured correctly |

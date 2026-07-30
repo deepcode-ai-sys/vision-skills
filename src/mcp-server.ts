@@ -15,6 +15,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { VisionSkills } from './index.js';
 
 async function main() {
@@ -55,6 +56,10 @@ async function main() {
             protocolVersion: '2024-11-05',
             capabilities: {
               tools: {
+                clipboard: {
+                  description: 'Read an image from the system clipboard and return its base64 data. Call this first when the user mentions an image but has not provided a file path.',
+                  inputSchema: { type: 'object', properties: {} },
+                },
                 analyze: {
                   description: 'Analyze an image and return structured JSON',
                   inputSchema: {
@@ -106,6 +111,47 @@ async function main() {
           if (name === 'health') {
             const health = await vision.healthCheck();
             result = JSON.stringify(health, null, 2);
+          } else if (name === 'clipboard') {
+            // Read image from system clipboard (Windows)
+            const isWin = process.platform === 'win32';
+            let b64 = '';
+            if (isWin) {
+              const psCommand = `
+Add-Type -AssemblyName System.Windows.Forms
+$img = [System.Windows.Forms.Clipboard]::GetImage()
+if ($img -ne $null) {
+  $ms = New-Object System.IO.MemoryStream
+  $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+  $b64 = [System.Convert]::ToBase64String($ms.ToArray())
+  Write-Output "DATA:$b64"
+} else {
+  Write-Output "ERROR:No image in clipboard"
+}`;
+              const output = execSync(
+                `powershell -NoProfile -Command "${psCommand.replace('"', '\\"').replace('\n', ';')}"`,
+                { timeout: 10000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
+              ).trim();
+
+              if (output.startsWith('DATA:')) {
+                b64 = output.slice(5).trim();
+              } else {
+                throw new Error(output.replace('ERROR:', ''));
+              }
+            } else {
+              // macOS: use osascript or sips
+              try {
+                const out = execSync(
+                  `osascript -e 'try' -e 'set theImage to the clipboard as «class PNGf»' -e 'set thePath to (path to temporary folder as text) & "vskill_clipboard.png"' -e 'set fileRef to open for access file thePath with write permission' -e 'write theImage to fileRef' -e 'close access fileRef' -e 'end try' 2>/dev/null; base64 < /tmp/vskill_clipboard.png 2>/dev/null || echo "ERROR:No image"`,
+                  { timeout: 10000, encoding: 'utf8' },
+                ).trim();
+                if (out && !out.startsWith('ERROR')) b64 = out;
+                else throw new Error('No image found in clipboard');
+              } catch {
+                throw new Error('Clipboard not supported on this platform. Save the image to a file and use analyze() instead.');
+              }
+            }
+
+            result = JSON.stringify({ base64: `data:image/png;base64,${b64}`, format: 'png' }, null, 2);
           } else if (name === 'analyze' || name === 'analyze_text') {
             const imageArg = args.image as string;
             if (!imageArg) throw new Error('Missing required "image" argument');
