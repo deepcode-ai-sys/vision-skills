@@ -5,43 +5,53 @@ description: "Use when the user asks you to analyze, describe, read, or extract 
 
 # Vision Skills
 
-You have MCP tools available to analyze images. When the user asks about an image, call the appropriate tool. The tool reads the image, extracts structured data via Gemini, and returns it as JSON. You read the JSON and answer the user — no need to process image pixels yourself.
+You have access to a vision analysis MCP server. When the user provides an image, find the server file and call it via bash using JSON-RPC over stdin/stdout.
 
-If the user pastes an image (or mentions an image they see), call `clipboard()` first to get the image data, then pass it to `analyze()`.
+## How to find the server
+
+The MCP server binary is registered in the OpenCode config. Read the config to find it:
+```
+Read opencode.json → find mcp.vision-skills.command
+→ Contains ["node", "/path/to/mcp-server.js"]
+→ Use that path
+```
+
+If not found, search for `mcp-server.js` in common locations or ask the user.
+
+## How to call
 
 ```
-User: "What's in this image?"
-  → Call MCP tool: clipboard()
-  → Tool returns base64 data
-  → Call analyze(image: base64_data)
-  → Read JSON → answer the user
+1. Initialize:
+   echo '{"jsonrpc":"2.0","id":1,"method":"initialize"...}' | node /path/to/mcp-server.js
+
+2. Analyze:
+   echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"analyze","arguments":{"image":"path.jpg"}}}' | node /path/to/mcp-server.js
 ```
 
 ## Available tools
 
 | Tool | Description |
 |------|-------------|
-| `clipboard()` | Read image from system clipboard (call this first when user mentions an image without a file) |
-| `analyze(image, mode?, depth?)` | Return full structured JSON |
-| `analyze_text(image, mode?)` | Return plain-text summary (easier for LLMs to consume) |
-| `health()` | Check if API is configured correctly |
+| `clipboard()` | Read image from system clipboard → returns base64 |
+| `analyze(image, mode?, depth?)` | Analyze image → full structured JSON |
+| `analyze_text(image, mode?)` | Analyze image → plain-text summary |
+| `health()` | Check if API is configured |
+
+### analyze() output includes
+
+- Text blocks (with position, color, emphasis)
+- Object labels (with bounding boxes)
+- Tables (structured rows/columns)
+- Code context (language, functions, errors)
+- Scene graph (spatial relationships)
+- UI hierarchy (containment tree)
+- Semantic relationships (advanced+)
+- Reasoning (advanced+)
 
 ### Parameters
 
 | Param | Values | Default | Description |
 |-------|--------|---------|-------------|
-| `image` | file path, URL, or base64 | required | The image to analyze |
-| `mode` | `basic`, `standard`, `advanced`, `full` | `standard` | Trade detail for speed/cost |
+| `image` | file path, URL, base64, `clipboard://` | required | The image to analyze |
+| `mode` | `basic`, `standard`, `advanced`, `full` | `standard` | Trade detail for cost |
 | `depth` | `fast`, `deep` | `fast` | `deep` tiles large images for thorough reading |
-
-### Output includes
-
-- **Text blocks** — every visible text with position
-- **Object labels** — detected objects with bounding boxes
-- **Tables** — structured rows/columns from dashboards, invoices, logs
-- **Code context** — language, function names, errors (if showing code)
-- **Text attributes** — color and emphasis (heading, error, muted, link...)
-- **Scene graph** — spatial relationships (left_of, contains, near...)
-- **UI hierarchy** — containment tree
-- **Semantic relationships** — part_of, labels, controls (advanced+)
-- **Reasoning** — summary, UI state, action hints (advanced+)
