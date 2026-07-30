@@ -188,19 +188,15 @@ goto MENU
 cls
 echo.
 echo --- VS Code ---
-echo  VS Code ho tro MCP. Them vao .vscode/mcp.json:
-echo.
-echo  +---------------------------------------+
-echo  |  "servers": {                          |
-echo  |    "vision-skills": {                  |
-echo  |      "type": "stdio",                  |
-echo  |      "command": "npx",                 |
-echo  |      "args": ["vision-skills-mcp"]     |
-echo  |    }                                   |
-echo  |  }                                     |
-echo  +---------------------------------------+
-echo  (VS Code doc bien mo truong GEMINI_API_KEYS tu he thong)
-echo.
+set CFG=.vscode\mcp.json
+if not exist ".vscode" mkdir ".vscode"
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"servers\": { \"vision-skills\": { \"type\": \"stdio\", \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"] } } }"
+    echo  + VS Code reads GEMINI_API_KEYS from environment variables.
+) else (
+    echo  + File exists. Add MCP manually.
+)
+echo  + Done!
 pause
 goto MENU
 
@@ -208,18 +204,19 @@ goto MENU
 cls
 echo.
 echo --- Cline / Roo / Kilo Code ---
-echo  Them vao file .cline/mcp.json, .roo/mcp.json, .kilocode/mcp.json:
 echo.
-echo  +---------------------------------------+
-echo  |  "mcpServers": {                       |
-echo  |    "vision-skills": {                  |
-echo  |      "command": "npx",                 |
-echo  |      "args": ["vision-skills-mcp"]     |
-echo  |    }                                   |
-echo  |  }                                     |
-echo  +---------------------------------------+
-echo  (These tools read the key from GEMINI_API_KEYS env)
+echo  Creating .cline/mcp.json...
+if not exist ".cline" mkdir ".cline"
+set CFG=.cline\mcp.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+) else (
+    echo  + File exists. Add MCP manually.
+)
 echo.
+echo  For Roo, copy to .roo/mcp.json
+echo  For Kilo Code, copy to .kilocode/mcp.json
+echo  + Done!
 pause
 goto MENU
 
@@ -227,16 +224,18 @@ goto MENU
 cls
 echo.
 echo --- 9Router ---
-echo  Node.js:
-echo    npm install vision-skills
-echo    import { VisionSkills } from 'vision-skills'
-echo    const vision = new VisionSkills({
-echo      geminiApiKeys: ["%GEMINI_KEY:~0,12%..."]
-echo    });
 echo.
-echo  REST API:
-echo    npx vision-skills serve
-echo    POST http://localhost:8000/v1/analyze
+echo  To integrate with 9Router, add this to your project:
+echo.
+echo  npm install vision-skills
+echo.
+echo  import { VisionSkills } from 'vision-skills'
+echo  const vision = new VisionSkills({ geminiApiKeys: ["%GEMINI_KEY:~0,12%..."] })
+echo  const result = await vision.analyze(screenshotBuffer)
+echo.
+echo  Or use the REST server:
+echo  npx vision-skills serve
+echo  POST http://localhost:8000/v1/analyze
 echo.
 pause
 goto MENU
@@ -263,10 +262,22 @@ set CFG=%USERPROFILE%\.cursor\mcp.json
 if not exist "%CFG%" (
     call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
 )
+:: VS Code
+if not exist ".vscode" mkdir ".vscode"
+set CFG=.vscode\mcp.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"servers\": { \"vision-skills\": { \"type\": \"stdio\", \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"] } } }"
+)
+:: Cline
+if not exist ".cline" mkdir ".cline"
+set CFG=.cline\mcp.json
+if not exist "%CFG%" (
+    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+)
 echo.
-echo  + Configured xong cho OpenCode, Claude Code, Cursor!
+echo  + Configured OpenCode, Claude Code, Cursor, VS Code, Cline!
 echo  + Your API key has been auto-filled.
-echo  + Restart your AI tool to apply changes.
+echo  + Restart your AI tools to apply.
 echo.
 pause
 goto MENU
@@ -275,12 +286,12 @@ goto MENU
 cls
 echo.
 echo --- Set Env + CLI ---
-echo  Dat GEMINI_API_KEYS vao he thong...
+echo  Saving GEMINI_API_KEYS to system environment...
 setx GEMINI_API_KEYS "%GEMINI_KEY%" >nul
 echo  + Saved to Environment Variables.
 echo  + Open a NEW terminal to apply.
 echo.
-echo  Test it: vision-skills analyze ./anh.jpg
+echo  Test it: vision-skills analyze ./image.jpg
 echo.
 pause
 goto MENU
