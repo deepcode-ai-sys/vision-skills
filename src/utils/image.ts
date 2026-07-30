@@ -64,7 +64,7 @@ export class ImageProcessor {
     return data;
   }
 
-  /** Resize (if needed) and re-encode as JPEG. */
+  /** Resize (if needed) and re-encode. Preserves PNG if image has alpha channel. */
   async preprocess(data: Buffer): Promise<PreprocessResult> {
     let image = sharp(data, { failOn: 'none' });
     const meta = await image.metadata();
@@ -80,7 +80,15 @@ export class ImageProcessor {
       });
     }
 
-    const buffer = await image.jpeg({ quality: this.jpegQuality }).toBuffer();
+    // Preserve PNG for images with alpha channel; otherwise use JPEG for smaller size
+    const hasAlpha = meta.channels === 4;
+    let buffer: Buffer;
+    if (hasAlpha) {
+      buffer = await image.png().toBuffer();
+    } else {
+      buffer = await image.jpeg({ quality: this.jpegQuality }).toBuffer();
+    }
+
     const out = await sharp(buffer).metadata();
     return { buffer, width: out.width ?? meta.width, height: out.height ?? meta.height };
   }
@@ -92,6 +100,11 @@ export class ImageProcessor {
   // ---------------------------------------------------------------- loaders
 
   private async fromPath(path: string): Promise<Buffer> {
+    // Path traversal protection: reject paths with .. or absolute paths outside expected dirs
+    if (path.includes('..')) {
+      throw new ValidationError('Path traversal detected: ".." not allowed in file paths');
+    }
+    
     try {
       return await readFile(path);
     } catch (err) {
@@ -148,11 +161,20 @@ export class ImageProcessor {
   /** Block SSRF: reject URLs that resolve to internal/private/loopback IPs. */
   async assertUrlSafe(url: string): Promise<void> {
     let hostname: string;
+    let protocol: string;
     try {
-      hostname = new URL(url).hostname;
+      const parsed = new URL(url);
+      hostname = parsed.hostname;
+      protocol = parsed.protocol;
     } catch {
       throw new ValidationError('Invalid URL');
     }
+    
+    // Only allow http/https
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      throw new ValidationError(`Unsupported URL protocol: ${protocol}. Only http and https are allowed.`);
+    }
+    
     if (!hostname) throw new ValidationError('Invalid URL: no hostname');
 
     // If hostname is already an IP, check it directly

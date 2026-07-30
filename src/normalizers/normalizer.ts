@@ -5,6 +5,7 @@
  * normalizes labels, assigns IDs, and merges duplicates by label + IoU.
  */
 
+import { randomUUID } from 'node:crypto';
 import { BoundingBox, type Entity, type PluginResult } from '../core/types.js';
 
 // Canonical label mapping (subset; extend as providers are added)
@@ -57,12 +58,9 @@ const LABEL_MAP: Record<string, string> = {
 };
 
 export class Normalizer {
-  private idCounter = 0;
-
   constructor(private labelMap: Record<string, string> = LABEL_MAP) {}
 
   normalize(results: PluginResult[]): Entity[] {
-    this.idCounter = 0;
     const entities: Entity[] = [];
 
     for (const result of results) {
@@ -177,8 +175,7 @@ export class Normalizer {
   }
 
   private nextId(): string {
-    this.idCounter += 1;
-    return `e${this.idCounter}`;
+    return randomUUID();
   }
 
   private mergeDuplicates(entities: Entity[], iouThreshold = 0.5): Entity[] {

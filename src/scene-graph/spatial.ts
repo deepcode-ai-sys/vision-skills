@@ -3,6 +3,8 @@
  *
  * Computes geometric relations (left_of, above, near, contains...) purely
  * from bounding boxes. No VLM required — runs in all modes.
+ * 
+ * Uses spatial grid indexing to optimize O(n²) to O(n*k) for dense images.
  */
 
 import {
@@ -11,6 +13,65 @@ import {
   type SpatialRelation,
   type SpatialRelationEdge,
 } from '../core/types.js';
+
+/**
+ * Simple spatial grid for accelerating neighbor queries.
+ * Divides image into cells and assigns entities to cells based on bbox.
+ */
+class SpatialGrid {
+  private cells: Map<string, Entity[]> = new Map();
+  private cellSize: number;
+
+  constructor(imageWidth: number, imageHeight: number, gridDivisions = 10) {
+    // Adaptive cell size based on image dimensions
+    this.cellSize = Math.max(imageWidth, imageHeight) / gridDivisions;
+  }
+
+  add(entity: Entity): void {
+    // Add entity to all cells it overlaps
+    const { x1, y1, x2, y2 } = entity.bbox;
+    const minCellX = Math.floor(x1 / this.cellSize);
+    const maxCellX = Math.floor(x2 / this.cellSize);
+    const minCellY = Math.floor(y1 / this.cellSize);
+    const maxCellY = Math.floor(y2 / this.cellSize);
+
+    for (let cx = minCellX; cx <= maxCellX; cx++) {
+      for (let cy = minCellY; cy <= maxCellY; cy++) {
+        const key = `${cx},${cy}`;
+        if (!this.cells.has(key)) {
+          this.cells.set(key, []);
+        }
+        this.cells.get(key)!.push(entity);
+      }
+    }
+  }
+
+  /** Get entities near a given entity (only checks nearby cells). */
+  getNearby(entity: Entity): Entity[] {
+    const nearby = new Set<Entity>();
+    const { x1, y1, x2, y2 } = entity.bbox;
+    
+    // Check cells that bbox touches + 1 cell margin
+    const minCellX = Math.floor(x1 / this.cellSize) - 1;
+    const maxCellX = Math.floor(x2 / this.cellSize) + 1;
+    const minCellY = Math.floor(y1 / this.cellSize) - 1;
+    const maxCellY = Math.floor(y2 / this.cellSize) + 1;
+
+    for (let cx = minCellX; cx <= maxCellX; cx++) {
+      for (let cy = minCellY; cy <= maxCellY; cy++) {
+        const key = `${cx},${cy}`;
+        const cell = this.cells.get(key);
+        if (cell) {
+          cell.forEach(e => nearby.add(e));
+        }
+      }
+    }
+
+    // Remove self
+    nearby.delete(entity);
+    return Array.from(nearby);
+  }
+}
 
 export interface SpatialThresholds {
   thresholdX: number; // fraction of image width
@@ -50,14 +111,26 @@ export class SpatialGraphBuilder {
     const edges: SpatialRelationEdge[] = [];
     const n = entities.length;
 
+    // Build adaptive spatial grid. Cell size scales with image so far-apart
+    // entities still share cells. For 1920x1080, cellSize ~= 192px.
+    const imageW = Math.max(...entities.map(e => e.bbox.x2)) || 1920;
+    const imageH = Math.max(...entities.map(e => e.bbox.y2)) || 1080;
+    const gridDivisions = Math.max(6, Math.ceil(Math.sqrt(n) / 3)); // Scale with entity count
+    const grid = new SpatialGrid(imageW, imageH, gridDivisions);
+    for (const e of entities) {
+      grid.add(e);
+    }
+
     for (let i = 0; i < n; i++) {
       const a = entities[i]!;
 
-      // 1. Containment + overlap: keep for ALL pairs (these are meaningful
-      //    and relatively rare, so no explosion risk).
-      for (let j = 0; j < n; j++) {
-        if (i === j) continue;
-        const b = entities[j]!;
+      // 1. Containment + overlap: use spatial grid to avoid O(n²) for ALL pairs
+      const nearby = grid.getNearby(a);
+      const seenIds = new Set<string>();
+      for (const b of nearby) {
+        if (a.entityId === b.entityId) continue;
+        seenIds.add(b.entityId);
+        
         if (this.contains(a.bbox, b.bbox)) {
           edges.push(this.edge(a.entityId, 'contains', b.entityId));
           continue;
@@ -73,23 +146,36 @@ export class SpatialGraphBuilder {
         }
       }
 
-      // 2. Directional + near: only for the K nearest neighbors of `a`.
-      //    This is what keeps the graph small and meaningful on dense images.
-      const neighbors = this.nearestNeighbors(a, entities, i);
+      // 2. Directional + near: K-nearest from ALL entities (already bounded, cheap per pair)
+      const allCandidates = entities.filter(e => e.entityId !== a.entityId);
+      const neighbors = this.nearestNeighbors(a, allCandidates);
       for (const b of neighbors) {
         edges.push(...this.directional(a, b));
       }
     }
 
-    return edges;
+    // Deduplicate: keep highest confidence for each (subject, relation, object) triple
+    return this.deduplicateRelations(edges);
   }
 
-  /** Return the K nearest entities to `a` by center distance. */
-  private nearestNeighbors(a: Entity, entities: Entity[], selfIndex: number): Entity[] {
+  /** Remove duplicate relations, keeping the one with highest confidence. */
+  private deduplicateRelations(edges: SpatialRelationEdge[]): SpatialRelationEdge[] {
+    const map = new Map<string, SpatialRelationEdge>();
+    for (const edge of edges) {
+      const key = `${edge.subjectId}:${edge.relation}:${edge.objectId}`;
+      const existing = map.get(key);
+      if (!existing || edge.confidence > existing.confidence) {
+        map.set(key, edge);
+      }
+    }
+    return Array.from(map.values());
+  }
+
+  /** Return the K nearest entities to `a` by center distance from candidates. */
+  private nearestNeighbors(a: Entity, candidates: Entity[]): Entity[] {
     const scored: Array<{ entity: Entity; dist: number }> = [];
-    for (let j = 0; j < entities.length; j++) {
-      if (j === selfIndex) continue;
-      const b = entities[j]!;
+    for (const b of candidates) {
+      if (b.entityId === a.entityId) continue; // Skip self
       const dx = b.bbox.centerX - a.bbox.centerX;
       const dy = b.bbox.centerY - a.bbox.centerY;
       scored.push({ entity: b, dist: Math.hypot(dx, dy) });
