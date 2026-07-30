@@ -48,50 +48,63 @@ async function main() {
 
       const method = msg.method as string;
 
+      // Tool definitions, shared by tools/list.
+      const TOOLS = [
+        {
+          name: 'clipboard',
+          description:
+            'Read an image from the system clipboard and return its base64 data. Call this first when the user mentions an image but has not provided a file path.',
+          inputSchema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'analyze',
+          description: 'Analyze an image and return structured JSON',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              image: { type: 'string', description: 'Image path, URL, or base64 data URI' },
+              mode: { type: 'string', enum: ['basic', 'standard', 'advanced', 'full'], default: 'standard' },
+              depth: { type: 'string', enum: ['fast', 'deep'], default: 'fast' },
+            },
+            required: ['image'],
+          },
+        },
+        {
+          name: 'analyze_text',
+          description: 'Analyze an image and return a plain-text summary (good for feeding to text-only LLMs)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              image: { type: 'string', description: 'Image path, URL, or base64 data URI' },
+              mode: { type: 'string', enum: ['basic', 'standard', 'advanced', 'full'], default: 'standard' },
+            },
+            required: ['image'],
+          },
+        },
+        {
+          name: 'health',
+          description: 'Check provider health',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ];
+
       if (method === 'initialize') {
+        // Per MCP spec: declare the tools capability as a feature flag here;
+        // the actual tool list is served by tools/list.
         write({
           jsonrpc: '2.0',
           id: msg.id,
           result: {
             protocolVersion: '2024-11-05',
-            capabilities: {
-              tools: {
-                clipboard: {
-                  description: 'Read an image from the system clipboard and return its base64 data. Call this first when the user mentions an image but has not provided a file path.',
-                  inputSchema: { type: 'object', properties: {} },
-                },
-                analyze: {
-                  description: 'Analyze an image and return structured JSON',
-                  inputSchema: {
-                    type: 'object',
-                    properties: {
-                      image: { type: 'string', description: 'Image path, URL, or base64 data URI' },
-                      mode: { type: 'string', enum: ['basic', 'standard', 'advanced', 'full'], default: 'standard' },
-                      depth: { type: 'string', enum: ['fast', 'deep'], default: 'fast' },
-                    },
-                    required: ['image'],
-                  },
-                },
-                analyze_text: {
-                  description: 'Analyze an image and return a plain-text summary (good for feeding to text-only LLMs)',
-                  inputSchema: {
-                    type: 'object',
-                    properties: {
-                      image: { type: 'string', description: 'Image path, URL, or base64 data URI' },
-                      mode: { type: 'string', enum: ['basic', 'standard', 'advanced', 'full'], default: 'standard' },
-                    },
-                    required: ['image'],
-                  },
-                },
-                health: {
-                  description: 'Check provider health',
-                  inputSchema: { type: 'object', properties: {} },
-                },
-              },
-            },
+            capabilities: { tools: { listChanged: false } },
             serverInfo: { name: 'vision-skills-mcp', version: '0.1.0' },
           },
         });
+        continue;
+      }
+
+      if (method === 'tools/list') {
+        write({ jsonrpc: '2.0', id: msg.id, result: { tools: TOOLS } });
         continue;
       }
 

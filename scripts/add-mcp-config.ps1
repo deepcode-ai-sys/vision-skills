@@ -1,6 +1,7 @@
 param(
     [string]$ConfigPath,
-    [string]$ApiKey
+    [string]$ApiKey,
+    [string]$ServerPath
 )
 
 # Add MCP vision-skills config to opencode.json
@@ -10,15 +11,15 @@ if ($null -eq $json.mcp) {
     $json | Add-Member -Name "mcp" -Value @{} -MemberType NoteProperty
 }
 
-# Create the vision-skills MCP entry
+# Create the vision-skills MCP entry with explicit node path
 $visionSkill = [PSCustomObject]@{
     type = "local"
-    command = @("npx", "vision-skills-mcp")
+    command = @("node", $ServerPath)
     enabled = $true
     env = @{ GEMINI_API_KEYS = $ApiKey }
 }
 
-# Add it to the mcp section (handles both empty and existing mcp objects)
+# Add it to the mcp section
 $mcp = $json.mcp
 $mcp | Add-Member -Name "vision-skills" -Value $visionSkill -MemberType NoteProperty -Force
 

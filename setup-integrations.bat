@@ -84,7 +84,8 @@ set ODIR=%USERPROFILE%\.config\opencode\skills\vision-skills
 if not exist "%ODIR%" mkdir "%ODIR%"
 if exist ".\SKILL.md" copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul && echo + SKILL.md copied
 :: Add MCP config via PowerShell script
-powershell -ExecutionPolicy Bypass -File "%~dp0scripts\add-mcp-config.ps1" -ConfigPath "%USERPROFILE%\.config\opencode\opencode.json" -ApiKey "%GEMINI_KEY%"
+set SERVER_PATH=%~dp0dist\mcp-server.js
+powershell -ExecutionPolicy Bypass -File "%~dp0scripts\add-mcp-config.ps1" -ConfigPath "%USERPROFILE%\.config\opencode\opencode.json" -ApiKey "%GEMINI_KEY%" -ServerPath "%SERVER_PATH%"
 echo + Done. Restart OpenCode.
 pause
 goto MENU
@@ -198,7 +199,7 @@ set ODIR=%USERPROFILE%\.config\opencode\skills\vision-skills
 if not exist "%ODIR%" mkdir "%ODIR%"
 if exist ".\SKILL.md" copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul
 :: OpenCode
-powershell -ExecutionPolicy Bypass -File "%~dp0scripts\add-mcp-config.ps1" -ConfigPath "%USERPROFILE%\.config\opencode\opencode.json" -ApiKey "%GEMINI_KEY%"
+powershell -ExecutionPolicy Bypass -File "%~dp0scripts\add-mcp-config.ps1" -ConfigPath "%USERPROFILE%\.config\opencode\opencode.json" -ApiKey "%GEMINI_KEY%" -ServerPath "%~dp0dist\mcp-server.js"
 :: Claude
 if not exist "%USERPROFILE%\.claude" mkdir "%USERPROFILE%\.claude"
 if not exist "%USERPROFILE%\.claude\claude.json" (
