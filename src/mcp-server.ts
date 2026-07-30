@@ -107,13 +107,22 @@ async function main() {
             const health = await vision.healthCheck();
             result = JSON.stringify(health, null, 2);
           } else if (name === 'analyze' || name === 'analyze_text') {
-            const imagePath = args.image as string;
-            if (!imagePath) throw new Error('Missing required "image" argument');
+            const imageArg = args.image as string;
+            if (!imageArg) throw new Error('Missing required "image" argument');
 
-            // If the image is a file path, read it
-            const imageInput = imagePath.startsWith('http') || imagePath.startsWith('data:')
-              ? imagePath
-              : readFileSync(imagePath);
+            // Accept: URL, data URI, file path, or raw base64
+            let imageInput: string | Buffer;
+            if (imageArg.startsWith('http://') || imageArg.startsWith('https://') || imageArg.startsWith('data:')) {
+              imageInput = imageArg;
+            } else {
+              // Check if it's a file that exists; otherwise treat as raw base64
+              try {
+                imageInput = readFileSync(imageArg);
+              } catch {
+                // Not a valid file path — assume raw base64
+                imageInput = Buffer.from(imageArg, 'base64');
+              }
+            }
 
             const mode = (args.mode as string) ?? 'standard';
             const depth = (args.depth as string) ?? 'fast';
