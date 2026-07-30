@@ -30,8 +30,6 @@ if "%GEMINI_KEY%"=="" (
     pause
     goto GETKEY
 )
-
-:: Basic validation - Gemini keys start with AIza
 if not "%GEMINI_KEY:~0,4%"=="AIza" (
     echo.
     echo  [!] Invalid key format. Gemini keys typically start with 'AIza...'
@@ -46,9 +44,9 @@ cls
 echo.
 echo  Building from local source...
 cd /d "%~dp0"
-call npm install 2>&1 | findstr /v "npm WARN"
-call npm run build 2>&1 | findstr /v "npm WARN"
-call npm link 2>&1 | findstr /v "npm WARN"
+call npm install 2>nul
+call npm run build 2>nul
+call npm link 2>nul
 echo  + Ready. vision-skills is now available globally.
 
 :MENU
@@ -91,12 +89,14 @@ if /i "%choice%"=="A" goto SETUP_ALL
 if /i "%choice%"=="B" goto SETUP_ENV
 goto MENU
 
-:MAKE_JSON <file> <content>
-if not exist "%~dp1" mkdir "%~dp1"
-echo %~2 > "%~1"
-echo  + Created %~1
-exit /b 0
+:: PowerShell helper - create JSON file with MCP config
+:MAKE_JSON <file> <json-label>
+:: Builds the correct JSON using PowerShell to handle escaping properly
+set CFG_PATH=%~1
+set JSON_LABEL=%~2
+goto :EOF
 
+:: --- OpenCode ---
 :SETUP_OPENCODE
 cls
 echo.
@@ -108,185 +108,215 @@ if exist ".\SKILL.md" (
     echo  + SKILL.md copied
 )
 set CFG=%USERPROFILE%\.config\opencode\opencode.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcp\": { \"vision-skills\": { \"type\": \"local\", \"command\": [\"npx\", \"vision-skills-mcp\"], \"enabled\": true, \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-    echo  + Config created at %CFG%
-) else (
-    echo  + opencode.json exists. Adding MCP config...
-    powershell -ExecutionPolicy Bypass -File "%~dp0scripts\add-mcp-config.ps1" -ConfigPath "%CFG%" -ApiKey "%GEMINI_KEY%"
-)
+powershell -ExecutionPolicy Bypass -Command "
+    $key = '%GEMINI_KEY%';
+    $cfg = '%CFG%';
+    $dir = Split-Path $cfg -Parent;
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if (!(Test-Path $cfg)) {
+        $mcp = @{ mcp = @{ 'vision-skills' = @{ type = 'local'; command = @('npx', 'vision-skills-mcp'); enabled = $true; env = @{ GEMINI_API_KEYS = $key } } } };
+        $mcp | ConvertTo-Json -Depth 10 | Set-Content $cfg -Encoding UTF8;
+        Write-Host '+ Config created';
+    } else {
+        $json = Get-Content $cfg -Raw -Encoding UTF8 | ConvertFrom-Json;
+        if ($json.mcp -eq $null) { $json | Add-Member -Name 'mcp' -Value @{} -MemberType NoteProperty }
+        $json.mcp | Add-Member -Name 'vision-skills' -Value @{ type = 'local'; command = @('npx', 'vision-skills-mcp'); enabled = $true; env = @{ GEMINI_API_KEYS = $key } } -Force;
+        $json | ConvertTo-Json -Depth 10 | Set-Content $cfg -Encoding UTF8;
+        Write-Host '+ MCP config merged into existing file';
+    }
+"
 echo  + Done! Restart OpenCode to apply.
 pause
 goto MENU
 
+:: --- Claude Code CLI ---
 :SETUP_CLAUDE
 cls
 echo.
 echo --- Claude Code CLI ---
 set CFG=%USERPROFILE%\.claude\claude.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-) else (
-    echo  + File exists. Add MCP manually vao %CFG%
-)
+powershell -ExecutionPolicy Bypass -Command "
+    $key = '%GEMINI_KEY%';
+    $cfg = '%CFG%';
+    $dir = Split-Path $cfg -Parent;
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if (!(Test-Path $cfg)) {
+        @{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = $key } } } } | ConvertTo-Json | Set-Content $cfg -Encoding UTF8;
+        Write-Host '+ Config created';
+    } else { Write-Host '+ File exists. Add MCP manually.' }
+"
 echo  + Done!
 pause
 goto MENU
 
+:: --- OpenAI Codex CLI ---
 :SETUP_CODEX
 cls
 echo.
 echo --- OpenAI Codex CLI ---
 set CFG=%USERPROFILE%\.codex\config.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-) else (
-    echo  + File exists. Add MCP manually.
-)
+powershell -ExecutionPolicy Bypass -Command "
+    $key = '%GEMINI_KEY%';
+    $cfg = '%CFG%';
+    $dir = Split-Path $cfg -Parent;
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if (!(Test-Path $cfg)) {
+        @{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = $key } } } } | ConvertTo-Json | Set-Content $cfg -Encoding UTF8;
+        Write-Host '+ Config created';
+    } else { Write-Host '+ File exists. Add MCP manually.' }
+"
 echo  + Done!
 pause
 goto MENU
 
+:: --- Cursor ---
 :SETUP_CURSOR
 cls
 echo.
 echo --- Cursor ---
 set CFG=%USERPROFILE%\.cursor\mcp.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-) else (
-    echo  + File exists. Add MCP manually.
-)
+powershell -ExecutionPolicy Bypass -Command "
+    $key = '%GEMINI_KEY%';
+    $cfg = '%CFG%';
+    $dir = Split-Path $cfg -Parent;
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if (!(Test-Path $cfg)) {
+        @{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = $key } } } } | ConvertTo-Json | Set-Content $cfg -Encoding UTF8;
+        Write-Host '+ Config created';
+    } else { Write-Host '+ File exists. Add MCP manually.' }
+"
 echo  + Done!
 pause
 goto MENU
 
+:: --- Continue (Continue.dev) ---
 :SETUP_CONTINUE
 cls
 echo.
 echo --- Continue (Continue.dev) ---
 set CFG=%USERPROFILE%\.continue\config.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"experimental\": { \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } } }"
-) else (
-    echo  + File exists. Add MCP manually.
-)
+powershell -ExecutionPolicy Bypass -Command "
+    $key = '%GEMINI_KEY%';
+    $cfg = '%CFG%';
+    $dir = Split-Path $cfg -Parent;
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if (!(Test-Path $cfg)) {
+        @{ experimental = @{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = $key } } } } } | ConvertTo-Json -Depth 10 | Set-Content $cfg -Encoding UTF8;
+        Write-Host '+ Config created';
+    } else { Write-Host '+ File exists. Add MCP manually.' }
+"
 echo  + Done!
 pause
 goto MENU
 
+:: --- GitHub Copilot ---
 :SETUP_COPILOT
 cls
 echo.
 echo --- GitHub Copilot ---
 set CFG=%USERPROFILE%\.github\copilot.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-) else (
-    echo  + File exists.
-)
+powershell -ExecutionPolicy Bypass -Command "
+    $key = '%GEMINI_KEY%';
+    $cfg = '%CFG%';
+    $dir = Split-Path $cfg -Parent;
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if (!(Test-Path $cfg)) {
+        @{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = $key } } } } | ConvertTo-Json | Set-Content $cfg -Encoding UTF8;
+        Write-Host '+ Config created';
+    } else { Write-Host '+ File exists.' }
+"
 echo  + Done!
 pause
 goto MENU
 
+:: --- VS Code ---
 :SETUP_VSCODE
 cls
 echo.
 echo --- VS Code ---
 set CFG=.vscode\mcp.json
 if not exist ".vscode" mkdir ".vscode"
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"servers\": { \"vision-skills\": { \"type\": \"stdio\", \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"] } } }"
-    echo  + VS Code reads GEMINI_API_KEYS from environment variables.
-) else (
-    echo  + File exists. Add MCP manually.
-)
+powershell -ExecutionPolicy Bypass -Command "
+    $cfg = '.vscode\mcp.json';
+    if (!(Test-Path $cfg)) {
+        @{ servers = @{ 'vision-skills' = @{ type = 'stdio'; command = 'npx'; args = @('vision-skills-mcp') } } } | ConvertTo-Json -Depth 10 | Set-Content $cfg -Encoding UTF8;
+        Write-Host '+ VS Code MCP config created';
+    } else { Write-Host '+ File exists.' }
+"
 echo  + Done!
 pause
 goto MENU
 
+:: --- Cline / Roo / Kilo Code ---
 :SETUP_CLINE
 cls
 echo.
 echo --- Cline / Roo / Kilo Code ---
-echo.
-echo  Creating .cline/mcp.json...
-if not exist ".cline" mkdir ".cline"
 set CFG=.cline\mcp.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-) else (
-    echo  + File exists. Add MCP manually.
-)
-echo.
-echo  For Roo, copy to .roo/mcp.json
-echo  For Kilo Code, copy to .kilocode/mcp.json
+if not exist ".cline" mkdir ".cline"
+powershell -ExecutionPolicy Bypass -Command "
+    $key = '%GEMINI_KEY%';
+    $cfg = '.cline\mcp.json';
+    if (!(Test-Path $cfg)) {
+        @{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = $key } } } } | ConvertTo-Json -Depth 10 | Set-Content $cfg -Encoding UTF8;
+        Write-Host '+ Cline MCP config created';
+    } else { Write-Host '+ File exists.' }
+"
 echo  + Done!
 pause
 goto MENU
 
+:: --- 9Router ---
 :SETUP_9ROUTER
 cls
 echo.
 echo --- 9Router ---
 echo.
-echo  To integrate with 9Router, add this to your project:
-echo.
-echo  npm install vision-skills
-echo.
-echo  import { VisionSkills } from 'vision-skills'
-echo  const vision = new VisionSkills({ geminiApiKeys: ["%GEMINI_KEY:~0,12%..."] })
-echo  const result = await vision.analyze(screenshotBuffer)
-echo.
-echo  Or use the REST server:
-echo  npx vision-skills serve
-echo  POST http://localhost:8000/v1/analyze
+echo  Integrate via SDK or REST:
+echo    npm install vision-skills
+echo    const v = new VisionSkills({ geminiApiKeys: ["%GEMINI_KEY:~0,12%..."] })
+echo    npx vision-skills serve
 echo.
 pause
 goto MENU
 
+:: --- All ---
 :SETUP_ALL
 cls
 echo.
-echo --- Setup Tat Ca ---
-:: OpenCode
+echo --- Setup All ---
+set KEY=%GEMINI_KEY%
 set ODIR=%USERPROFILE%\.config\opencode\skills\vision-skills
 if not exist "%ODIR%" mkdir "%ODIR%"
 if exist ".\SKILL.md" copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul
-set CFG=%USERPROFILE%\.config\opencode\opencode.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcp\": { \"vision-skills\": { \"type\": \"local\", \"command\": [\"npx\", \"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-)
-:: Claude Code
-set CFG=%USERPROFILE%\.claude\claude.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-)
-:: Cursor
-set CFG=%USERPROFILE%\.cursor\mcp.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-)
-:: VS Code
-if not exist ".vscode" mkdir ".vscode"
-set CFG=.vscode\mcp.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"servers\": { \"vision-skills\": { \"type\": \"stdio\", \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"] } } }"
-)
-:: Cline
-if not exist ".cline" mkdir ".cline"
-set CFG=.cline\mcp.json
-if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
-)
-echo.
-echo  + Configured OpenCode, Claude Code, Cursor, VS Code, Cline!
-echo  + Your API key has been auto-filled.
-echo  + Restart your AI tools to apply.
-echo.
+
+powershell -ExecutionPolicy Bypass -Command "
+    $key = '%KEY%';
+    $targets = @(
+        @{ path = '%USERPROFILE%\.config\opencode\opencode.json'; mcp = @{ 'vision-skills' = @{ type = 'local'; command = @('npx', 'vision-skills-mcp'); enabled = $true; env = @{ GEMINI_API_KEYS = $key } } } };
+        @{ path = '%USERPROFILE%\.claude\claude.json'; mcp = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = $key } } } };
+        @{ path = '%USERPROFILE%\.cursor\mcp.json'; mcp = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = $key } } } }
+    );
+    foreach ($t in $targets) {
+        $dir = Split-Path $t.path -Parent;
+        if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        if (!(Test-Path $t.path)) {
+            if ($t.path -match 'opencode') {
+                @{ mcp = $t.mcp } | ConvertTo-Json -Depth 10 | Set-Content $t.path -Encoding UTF8;
+            } else {
+                @{ mcpServers = $t.mcp } | ConvertTo-Json -Depth 10 | Set-Content $t.path -Encoding UTF8;
+            }
+            Write-Host ('+ Created: ' + $t.path);
+        } else {
+            Write-Host ('+ Exists: ' + $t.path + ' - add MCP manually');
+        }
+    }
+"
+echo  + Done! Restart AI tools to apply.
 pause
 goto MENU
 
+:: --- Set Env + CLI ---
 :SETUP_ENV
 cls
 echo.
@@ -296,7 +326,7 @@ setx GEMINI_API_KEYS "%GEMINI_KEY%" >nul
 echo  + Saved to Environment Variables.
 echo  + Open a NEW terminal to apply.
 echo.
-echo  Test it: vision-skills analyze ./image.jpg
+echo  Test: vision-skills analyze ./image.jpg
 echo.
 pause
 goto MENU
