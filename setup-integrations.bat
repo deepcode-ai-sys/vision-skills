@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 title Vision Skills Integration Setup
 setlocal enabledelayedexpansion
@@ -109,18 +109,13 @@ if exist ".\SKILL.md" (
 )
 set CFG=%USERPROFILE%\.config\opencode\opencode.json
 if not exist "%CFG%" (
-    call :MAKE_JSON "%CFG%" "{ \"mcp\": { \"vision-skills\": { \"type\": \"local\", \"command\": [\"npx\", \"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
+    call :MAKE_JSON "%CFG%" "{ \"mcp\": { \"vision-skills\": { \"type\": \"local\", \"command\": [\"npx\", \"vision-skills-mcp\"], \"enabled\": true, \"env\": { \"GEMINI_API_KEYS\": \"%GEMINI_KEY%\" } } } }"
     echo  + Config created at %CFG%
 ) else (
-    echo  + File exists. Add this to your opencode.json:
-    echo.
-    echo  { "mcp": { "vision-skills": {
-    echo    "type": "local",
-    echo    "command": ["npx", "vision-skills-mcp"],
-    echo    "env": { "GEMINI_API_KEYS": "%GEMINI_KEY%" }
-    echo  } } }
+    echo  + opencode.json exists. Adding MCP config...
+    powershell -ExecutionPolicy Bypass -File "%~dp0scripts\add-mcp-config.ps1" -ConfigPath "%CFG%" -ApiKey "%GEMINI_KEY%"
 )
-echo  + Done!
+echo  + Done! Restart OpenCode to apply.
 pause
 goto MENU
 
