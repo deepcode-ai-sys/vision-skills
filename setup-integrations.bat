@@ -41,12 +41,15 @@ if not "%GEMINI_KEY:~0,4%"=="AIza" (
     goto GETKEY
 )
 
-:: Install global
+:: Build local + link globally
 cls
 echo.
-echo  Installing vision-skills globally...
-call npm install -g vision-skills 2>&1 | findstr /v "npm WARN"
-echo  + Installed.
+echo  Building from local source...
+cd /d "%~dp0"
+call npm install 2>&1 | findstr /v "npm WARN"
+call npm run build 2>&1 | findstr /v "npm WARN"
+call npm link 2>&1 | findstr /v "npm WARN"
+echo  + Ready. vision-skills is now available globally.
 
 :MENU
 cls
