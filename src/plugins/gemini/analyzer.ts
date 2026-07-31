@@ -40,6 +40,38 @@ export interface CodeInfo {
   snippet: string | null;
 }
 
+export interface ExtractedRegion {
+  id: string;
+  name: string;
+  purpose: string;
+  box_2d?: number[];
+  children?: ExtractedRegion[];
+}
+
+export interface ExtractedLayout {
+  composition?: {
+    ruleOfThirds?: boolean;
+    mainSubject?: string | null;
+    cameraAngle?: string | null;
+    visualHierarchy?: string | null;
+  };
+  lighting?: {
+    source?: string | null;
+    direction?: string | null;
+    temperature?: string | null;
+    brightness?: number | null;
+    contrast?: number | null;
+    shadowType?: string | null;
+  };
+  color?: {
+    palette?: string[];
+    dominant?: string | null;
+    saturation?: number | null;
+    brightness?: number | null;
+    tone?: string | null;
+  };
+}
+
 export interface CombinedResult {
   imageType: ImageType | null;
   textBlocks: TextBlockDetail[];
@@ -47,6 +79,10 @@ export interface CombinedResult {
   tables: ExtractedTable[];
   /** Tier 6: code understanding when the image shows code. */
   code: CodeInfo | null;
+  /** Region tree — the image split into meaningful regions (vision spec §5). */
+  regions: ExtractedRegion[];
+  /** Layout / lighting / color analysis (vision spec §9–10). */
+  layout: ExtractedLayout | null;
 }
 
 /**
@@ -63,7 +99,13 @@ Return ONLY a JSON object (no markdown) with this exact shape:
   "text_blocks": [{"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "language": "vi", "color": "#ff3333", "emphasis": "error"}],
   "objects": [{"label": "person", "box_2d": [ymin, xmin, ymax, xmax], "confidence": 0.95}],
   "tables": [{"title": "...", "columns": ["col1","col2"], "rows": [["a","b"],["c","d"]], "box_2d": [ymin, xmin, ymax, xmax]}],
-  "code": {"language": "python", "functions": ["render_video"], "errors": ["TypeError: ..."], "snippet": "def render_video(): ..."}
+  "code": {"language": "python", "functions": ["render_video"], "errors": ["TypeError: ..."], "snippet": "def render_video(): ..."},
+  "regions": [{"id": "region_1", "name": "top_bar", "purpose": "navigation", "box_2d": [ymin, xmin, ymax, xmax], "children": []}],
+  "layout": {
+    "composition": {"rule_of_thirds": true, "main_subject": "login form", "camera_angle": "eye_level", "visual_hierarchy": "form center, header top"},
+    "lighting": {"source": "artificial", "direction": "top-left", "temperature": "cool", "brightness": 0.7, "contrast": 0.6, "shadow_type": "soft"},
+    "color": {"palette": ["#ffffff","#4a90d9","#333333"], "dominant": "light", "saturation": 0.4, "brightness": 0.8, "tone": "clean"}
+  }
 }
 
 CRITICAL rules for thoroughness:
@@ -81,6 +123,14 @@ CRITICAL rules for thoroughness:
 - If the image shows source code, a terminal, or an IDE, fill "code" with the
   detected language, visible function/class names, any error/stack-trace text,
   and a short representative snippet. Otherwise set "code" to null.
+- REGIONS: split the image into its main functional regions (top_bar, sidebar,
+  main_content, footer, nav, header, form_area, etc). Each region has a purpose
+  ("navigation", "content", "input", "footer"...). Nest children when regions
+  contain sub-regions. Empty array if the image has no clear regions.
+- LAYOUT: best-effort composition (rule_of_thirds for real photos, main_subject,
+  camera_angle, visual_hierarchy), lighting (source, direction, temperature,
+  brightness 0-1, contrast 0-1, shadow_type), color (3-6 hex palette, dominant
+  tone, saturation 0-1, brightness 0-1). Omit/use null when uncertain.
 - image_type: "screen_ui" for app/website/software; "document" for
   scanned/photographed paper; "real_world" for photos; "mixed" if unclear.
 - box_2d values are integers 0-1000 normalized to image dimensions.
@@ -153,7 +203,15 @@ export function parseCombined(raw: string, width: number, height: number): Combi
     const parsed = JSON.parse(stripFences(raw));
     data = typeof parsed === 'object' && parsed !== null ? parsed : {};
   } catch {
-    return { imageType: null, textBlocks: [], objects: [], tables: [], code: null };
+    return {
+      imageType: null,
+      textBlocks: [],
+      objects: [],
+      tables: [],
+      code: null,
+      regions: [],
+      layout: null,
+    };
   }
 
   const rawType = data.image_type as string | undefined;
@@ -215,7 +273,85 @@ export function parseCombined(raw: string, width: number, height: number): Combi
     }
   }
 
-  return { imageType, textBlocks, objects, tables, code };
+  // Regions: parse with optional nested children.
+  const rawRegions = Array.isArray(data.regions) ? data.regions : [];
+  const parseRegion = (d: Record<string, unknown>): ExtractedRegion | null => {
+    const name = String(d.name ?? '').trim();
+    if (!name) return null;
+    return {
+      id: String(d.id ?? name),
+      name,
+      purpose: String(d.purpose ?? ''),
+      box_2d: Array.isArray(d.box_2d)
+        ? geminiBoxToPixels(d.box_2d as number[], width, height)
+        : undefined,
+      children: Array.isArray(d.children)
+        ? d.children
+            .filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null)
+            .map((c) => parseRegion(c))
+            .filter((r): r is ExtractedRegion => r !== null)
+        : undefined,
+    };
+  };
+  const regions = rawRegions
+    .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+    .map((r) => parseRegion(r))
+    .filter((r): r is ExtractedRegion => r !== null);
+
+  // Layout / lighting / color (best-effort).
+  let layout: ExtractedLayout | null = null;
+  const rawLayout = data.layout;
+  if (rawLayout && typeof rawLayout === 'object') {
+    const l = rawLayout as Record<string, unknown>;
+    const composition =
+      l.composition && typeof l.composition === 'object'
+        ? (l.composition as Record<string, unknown>)
+        : undefined;
+    const lighting =
+      l.lighting && typeof l.lighting === 'object'
+        ? (l.lighting as Record<string, unknown>)
+        : undefined;
+    const color =
+      l.color && typeof l.color === 'object'
+        ? (l.color as Record<string, unknown>)
+        : undefined;
+
+    if (composition || lighting || color) {
+      layout = {
+        composition: composition
+          ? {
+              ruleOfThirds: composition.rule_of_thirds === true,
+              mainSubject: (composition.main_subject as string) ?? null,
+              cameraAngle: (composition.camera_angle as string) ?? null,
+              visualHierarchy: (composition.visual_hierarchy as string) ?? null,
+            }
+          : undefined,
+        lighting: lighting
+          ? {
+              source: (lighting.source as string) ?? null,
+              direction: (lighting.direction as string) ?? null,
+              temperature: (lighting.temperature as string) ?? null,
+              brightness: typeof lighting.brightness === 'number' ? lighting.brightness : null,
+              contrast: typeof lighting.contrast === 'number' ? lighting.contrast : null,
+              shadowType: (lighting.shadow_type as string) ?? null,
+            }
+          : undefined,
+        color: color
+          ? {
+              palette: Array.isArray(color.palette)
+                ? color.palette.map((p) => String(p)).slice(0, 6)
+                : undefined,
+              dominant: (color.dominant as string) ?? null,
+              saturation: typeof color.saturation === 'number' ? color.saturation : null,
+              brightness: typeof color.brightness === 'number' ? color.brightness : null,
+              tone: (color.tone as string) ?? null,
+            }
+          : undefined,
+      };
+    }
+  }
+
+  return { imageType, textBlocks, objects, tables, code, regions, layout };
 }
 
 /**
@@ -254,6 +390,32 @@ export async function getGeminiCode(context: RequestContext): Promise<CodeInfo |
   if (!existing) return null;
   try {
     return (await existing).code;
+  } catch {
+    return null;
+  }
+}
+
+/** Read the extracted regions from the memoized combined result (or []). */
+export async function getGeminiRegions(
+  context: RequestContext,
+): Promise<ExtractedRegion[]> {
+  const existing = cache.get(context);
+  if (!existing) return [];
+  try {
+    return (await existing).regions;
+  } catch {
+    return [];
+  }
+}
+
+/** Read the layout/lighting/color analysis (or null). */
+export async function getGeminiLayout(
+  context: RequestContext,
+): Promise<ExtractedLayout | null> {
+  const existing = cache.get(context);
+  if (!existing) return null;
+  try {
+    return (await existing).layout;
   } catch {
     return null;
   }

@@ -16,7 +16,9 @@ import {
   SCHEMA_VERSION,
   BoundingBox,
   type ImageInput,
+  type KnowledgeGraph,
   type ProcessingMode,
+  type Region,
   type RequestContext,
   type SceneGraph,
   type Table,
@@ -31,7 +33,13 @@ import type { VisionPlugin } from './plugins/base.js';
 import { GeminiOCRPlugin } from './plugins/ocr/gemini.js';
 import { GeminiDetectionPlugin } from './plugins/detection/gemini.js';
 import { GeminiVLMClient } from './plugins/vlm/gemini.js';
-import { getGeminiImageType, getGeminiTables, getGeminiCode } from './plugins/gemini/analyzer.js';
+import {
+  getGeminiImageType,
+  getGeminiTables,
+  getGeminiCode,
+  getGeminiRegions,
+  getGeminiLayout,
+} from './plugins/gemini/analyzer.js';
 import { GeminiKeyPool } from './plugins/gemini/key-pool.js';
 import { GoogleVisionOCRPlugin } from './plugins/ocr/google-vision.js';
 import { GoogleVisionDetectionPlugin } from './plugins/detection/google-vision.js';
@@ -149,6 +157,22 @@ export class VisionSkills {
     // Detected code / terminal content (tier 6), if any.
     const code = await getGeminiCode(context);
 
+    // Region tree + layout/lighting/color (vision spec §5, §9–10).
+    const rawRegions = await getGeminiRegions(context);
+    const regions: Region[] = rawRegions.map((r) => ({
+      id: r.id,
+      name: r.name,
+      purpose: r.purpose,
+      bbox: r.box_2d ? BoundingBox.fromList(r.box_2d) : undefined,
+      children: r.children?.map((c) => ({
+        id: c.id,
+        name: c.name,
+        purpose: c.purpose,
+        bbox: c.box_2d ? BoundingBox.fromList(c.box_2d) : undefined,
+      })),
+    }));
+    const layout = await getGeminiLayout(context);
+
     // 7. Spatial scene graph (all modes)
     const spatialBuilder = new SpatialGraphBuilder(width, height, {
       thresholdX: this.config.spatialThresholdX,
@@ -201,11 +225,31 @@ export class VisionSkills {
       r.warnings.forEach((w) => warnings.push(`[${r.plugin}] ${w}`));
     }
 
+    // Knowledge graph: nodes = entities, edges = scene graph relations.
+    // Built deterministically in code (no extra API call) — the LLM-friendly
+    // form of the same data (vision spec §14).
+    const knowledgeGraph: KnowledgeGraph = {
+      nodes: entities.map((e) => ({
+        id: e.entityId,
+        type: e.label,
+        text: e.text ?? null,
+      })),
+      edges: sceneGraph.spatial.map((edge) => ({
+        from: edge.subjectId,
+        relation: edge.relation,
+        to: edge.objectId,
+        confidence: edge.confidence,
+      })),
+    };
+
     const response: VisionResponse = {
       schemaVersion: SCHEMA_VERSION,
       imageType: effectiveType,
       modeUsed: mode,
       entities,
+      regions,
+      layout,
+      knowledgeGraph,
       tables,
       code,
       sceneGraph,

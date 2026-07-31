@@ -286,6 +286,68 @@ export interface CodeInfo {
 }
 
 // ============================================================================
+// Region layer — the image split into meaningful regions (per vision spec §5)
+// ============================================================================
+
+export interface Region {
+  id: string;
+  name: string; // e.g. "top_bar", "sidebar", "main_content"
+  purpose: string; // e.g. "navigation", "content", "footer"
+  bbox?: BoundingBox;
+  children?: Region[];
+}
+
+// ============================================================================
+// Semantic layer — layout, lighting, color (per vision spec §9–10)
+// ============================================================================
+
+export interface LayoutInfo {
+  composition?: {
+    ruleOfThirds?: boolean;
+    mainSubject?: string | null;
+    cameraAngle?: string | null;
+    visualHierarchy?: string | null;
+  };
+  lighting?: {
+    source?: string | null;
+    direction?: string | null;
+    temperature?: string | null;
+    brightness?: number | null;
+    contrast?: number | null;
+    shadowType?: string | null;
+  };
+  color?: {
+    palette?: string[];
+    dominant?: string | null;
+    saturation?: number | null;
+    brightness?: number | null;
+    tone?: string | null;
+  };
+}
+
+// ============================================================================
+// Knowledge Graph — nodes + edges for LLM reasoning (per vision spec §14)
+// ============================================================================
+
+export interface KnowledgeNode {
+  id: string;
+  type: string; // label: text_block, person, button...
+  text?: string | null;
+}
+
+export interface KnowledgeEdge {
+  from: string;
+  relation: string;
+  to: string;
+  confidence?: number;
+}
+
+export interface KnowledgeGraph {
+  nodes: KnowledgeNode[];
+  edges: KnowledgeEdge[];
+}
+
+// ============================================================================
 // Final response
 // ============================================================================
 
@@ -294,6 +356,9 @@ export interface VisionResponse {
   imageType: ImageType;
   modeUsed: ProcessingMode;
   entities: Entity[];
+  regions: Region[];
+  layout: LayoutInfo | null;
+  knowledgeGraph: KnowledgeGraph;
   tables: Table[];
   code: CodeInfo | null;
   sceneGraph: SceneGraph;

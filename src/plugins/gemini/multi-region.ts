@@ -165,6 +165,8 @@ export async function analyzeMultiRegion(
     imageType: base.imageType,
     tables: base.tables,
     code: base.code,
+    regions: base.regions,
+    layout: base.layout,
     textBlocks: dedupeText(textBlocks),
     objects: dedupeObjects(objects),
   };
