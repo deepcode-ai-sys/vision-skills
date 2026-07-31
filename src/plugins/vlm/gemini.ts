@@ -32,7 +32,7 @@ export class GeminiVLMClient implements VLMClient {
       model: this.model,
       prompt,
       imageBase64: image.toString('base64'),
-      timeoutMs: 30000,
+      timeoutMs: 45000,
       jsonOutput: true,
     });
   }

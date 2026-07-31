@@ -15,10 +15,11 @@ export class GeminiDetectionPlugin extends BasePlugin {
   readonly pluginType: PluginType = 'detection';
   readonly provider = 'gemini';
   override readonly costEstimate = 0; // free tier
-  // Orchestrator budget (total, across key rotation). flash-lite ~4-8s/call.
-  override readonly timeoutMs = 60000;
-  // Per-attempt fetch timeout. flash-lite dense-image calls ~4-8s; 20s headroom.
-  private readonly perAttemptTimeoutMs = 20000;
+  // Orchestrator budget (total, across key rotation). Very dense images
+  // can take 30-60s for combined extraction.
+  override readonly timeoutMs = 120000;
+  // Per-attempt fetch timeout. Dense images ~30-60s; 45s headroom.
+  private readonly perAttemptTimeoutMs = 45000;
 
   private keyPool: GeminiKeyPool;
 

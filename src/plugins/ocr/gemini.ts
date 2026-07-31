@@ -15,12 +15,13 @@ export class GeminiOCRPlugin extends BasePlugin {
   readonly pluginType: PluginType = 'ocr';
   readonly provider = 'gemini';
   override readonly costEstimate = 0; // free tier
-  // Orchestrator budget (total, across key rotation). flash-lite answers
-  // dense images in ~4-8s; budget covers several attempts during rotation.
-  override readonly timeoutMs = 60000;
-  // Per-attempt fetch timeout. flash-lite dense-image calls ~4-8s; 20s gives
-  // headroom. Rate-limited/bad keys fail fast (~200ms) and rotate instantly.
-  private readonly perAttemptTimeoutMs = 20000;
+  // Orchestrator budget (total, across key rotation). Very dense images
+  // (e.g. full web pages) can take 30-60s for the combined extraction,
+  // so the budget must allow a long single attempt + rotation.
+  override readonly timeoutMs = 120000;
+  // Per-attempt fetch timeout. Dense images with huge JSON output can take
+  // 30-60s; 45s gives headroom. Rate-limited/bad keys fail fast (~200ms).
+  private readonly perAttemptTimeoutMs = 45000;
 
   private keyPool: GeminiKeyPool;
 
