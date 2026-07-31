@@ -13,6 +13,11 @@
  *
  * The full trace is returned so a text-only model can see HOW the
  * conclusion was reached, not just the conclusion.
+ *
+ * IMPORTANT: the reasoner must read the image's CONTENT, not just classify
+ * it. A YouTube screenshot deserves "video titles X, Y, Z with N views",
+ * not merely "this is YouTube". The observe phase must enumerate actual
+ * visible content.
  */
 
 import type {
@@ -21,25 +26,37 @@ import type {
   ImageType,
   ReasonerOutput,
   SceneGraph,
+  Table,
   ThinkingStep,
+  CodeInfo,
 } from '../core/types.js';
 import type { VLMClient } from '../scene-graph/semantic.js';
+
+export interface ReasonInput {
+  image: Buffer;
+  entities: Entity[];
+  sceneGraph: SceneGraph;
+  imageType: ImageType;
+  tables?: Table[];
+  code?: CodeInfo | null;
+}
 
 export class Reasoner {
   constructor(private vlm: VLMClient | null) {}
 
-  async reason(
-    image: Buffer,
-    entities: Entity[],
-    sceneGraph: SceneGraph,
-    imageType: ImageType,
-  ): Promise<ReasonerOutput | null> {
+  async reason(input: ReasonInput): Promise<ReasonerOutput | null> {
     if (!this.vlm) return null;
 
-    const prompt = this.buildPrompt(entities, sceneGraph, imageType);
+    const prompt = this.buildPrompt(
+      input.entities,
+      input.sceneGraph,
+      input.imageType,
+      input.tables,
+      input.code,
+    );
     let raw: string;
     try {
-      raw = await this.vlm.askJson(image, prompt, 2048);
+      raw = await this.vlm.askJson(input.image, prompt, 2048);
     } catch {
       return null;
     }
@@ -50,9 +67,13 @@ export class Reasoner {
     entities: Entity[],
     sceneGraph: SceneGraph,
     imageType: ImageType,
+    tables?: Table[],
+    code?: CodeInfo | null,
   ): string {
+    // Include MORE entities (up to 150) so real content (video titles,
+    // numbers, channel names) reaches the reasoner.
     const entitySummary = entities
-      .slice(0, 80)
+      .slice(0, 150)
       .map((e) => {
         let line = `  - ${e.entityId}: ${e.label}`;
         if (e.text) line += ` text="${e.text}"`;
@@ -64,41 +85,76 @@ export class Reasoner {
       .join('\n');
 
     const spatialSummary = sceneGraph.spatial
-      .slice(0, 60)
+      .slice(0, 80)
       .map((edge) => `  - ${edge.subjectId} ${edge.relation} ${edge.objectId}`)
       .join('\n');
+
+    // Structured tables (real data) — critical for content-level reading.
+    let tableSummary = '  (none)';
+    if (tables && tables.length > 0) {
+      tableSummary = tables
+        .slice(0, 5)
+        .map((t) => {
+          const header = t.title ? `title="${t.title}" ` : '';
+          const cols = t.columns.length ? `cols=[${t.columns.join(' | ')}]` : '';
+          const rows = t.rows
+            .slice(0, 10)
+            .map((r) => `    | ${r.join(' | ')}`)
+            .join('\n');
+          const more = t.rows.length > 10 ? `\n    ... +${t.rows.length - 10} more rows` : '';
+          return `  table ${header}${cols}\n${rows}${more}`;
+        })
+        .join('\n');
+    }
+
+    let codeSummary = '  (none)';
+    if (code) {
+      codeSummary = [
+        code.language ? `language=${code.language}` : null,
+        code.functions.length ? `functions=[${code.functions.join(', ')}]` : null,
+        code.errors.length ? `errors=[${code.errors.join(', ')}]` : null,
+      ]
+        .filter(Boolean)
+        .join('; ');
+    }
 
     let contextHint = '';
     if (imageType === 'screen_ui') {
       contextHint =
-        'This is a UI screenshot. Focus on: what screen/app this is, what ' +
-        'state the UI is in, and what actions a user could take.';
+        'This is a UI screenshot. READ ITS CONTENT: enumerate the actual items ' +
+        '(video titles, menu labels, numbers, stats, table rows, file names), ' +
+        'then identify what screen/app this is and its state.';
     } else if (imageType === 'real_world') {
       contextHint =
-        'This is a real-world photo. Focus on: the main subject, the ' +
-        'activity happening, and the overall context.';
+        'This is a real-world photo. READ ITS CONTENT: enumerate the actual ' +
+        'objects, people, text, signs, and numbers visible, then interpret.';
     } else if (imageType === 'document') {
       contextHint =
-        'This is a document. Focus on: document type, key content, and structure.';
+        'This is a document. READ ITS CONTENT: enumerate the actual headings, ' +
+        'paragraph topics, numbers, and structure.';
     }
 
     return (
       `You are analyzing an image using a disciplined reasoning protocol. ${contextHint}\n\n` +
-      'Detected entities (from the extraction pass):\n' +
+      'Detected entities (from the extraction pass — this is your ground truth, but ' +
+      'ALSO look at the image itself; the extraction may have missed things):\n' +
       `${entitySummary || '  (none)'}\n\n` +
+      'Structured tables extracted from the image:\n' +
+      `${tableSummary}\n\n` +
+      (code ? `Detected code context:\n${codeSummary}\n\n` : '') +
       'Spatial relationships:\n' +
       `${spatialSummary || '  (none)'}\n\n` +
       'Reason through the image IN ORDER, then return a JSON object (no markdown) with this exact shape:\n' +
       '{\n' +
       '  "thinking_trace": [\n' +
-      '    {"phase": "observe", "content": "Only what is literally visible. No interpretation."},\n' +
+      '    {"phase": "observe", "content": "ENUMERATE the actual visible content: every title, label, number, name, stat you can read. No interpretation, just facts."},\n' +
       '    {"phase": "ground", "content": "Which observations are certain vs assumed. E.g. text read clearly vs guessed from blur."},\n' +
       '    {"phase": "hypothesize", "content": "At least TWO hypotheses about what this image/screen is. Write both down."},\n' +
       '    {"phase": "verify", "content": "Which observed detail(s) discriminate between the hypotheses. Which hypothesis wins and why."},\n' +
       '    {"phase": "self_review", "content": "What could I have misread? Text that might be wrong? Icons guessed? What is the weakest link?"},\n' +
       '    {"phase": "deliver", "content": "The conclusion with calibrated confidence."}\n' +
       '  ],\n' +
-      '  "summary": "one or two sentence semantic summary",\n' +
+      '  "summary": "3-5 sentence summary. MUST include actual content: specific titles, numbers, names, stats, states — not just \\"this is a YouTube page\\". E.g. \\"YouTube homepage in Vietnamese showing 8 recommended videos including [titles], with [stats].\\""\n' +
       '  "ui_state_interpretation": "state description or null",\n' +
       '  "action_hints": [{"action": "click", "target": "entity_id or description", "reason": "why"}],\n' +
       '  "anomalies": ["any unusual or broken things you notice"],\n' +
@@ -106,11 +162,12 @@ export class Reasoner {
       '  "reasoning_confidence": 0.85\n' +
       '}\n\n' +
       'Discipline rules:\n' +
-      '- OBSERVE phase must not interpret: state pixels/text/objects, not meaning.\n' +
+      '- OBSERVE phase MUST enumerate content: actual titles, numbers, names, labels. Listing 10 concrete items beats 1 vague sentence.\n' +
       '- GROUND phase: label each load-bearing observation OBSERVED or ASSUMED.\n' +
       '- HYPOTHESIZE phase: two hypotheses minimum. One hypothesis is pattern-matching.\n' +
       '- SELF_REVIEW phase: be adversarial toward your own reading. What would prove you wrong?\n' +
-      '- DELIVER phase: confidence must match evidence. Blurry text = lower confidence.'
+      '- DELIVER phase: confidence must match evidence. Blurry text = lower confidence.\n' +
+      '- The SUMMARY must contain real content from the image, never a generic template.'
     );
   }
 

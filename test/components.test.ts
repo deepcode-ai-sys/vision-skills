@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 
 import { GoogleVisionOCRPlugin } from '../src/plugins/ocr/google-vision.js';
 import { GoogleVisionDetectionPlugin } from '../src/plugins/detection/google-vision.js';
@@ -155,29 +155,29 @@ describe('Reasoner', () => {
 
   it('returns null without VLM', async () => {
     const r = new Reasoner(null);
-    expect(await r.reason(Buffer.from(''), entities, { spatial: [], semantic: [] }, 'screen_ui')).toBeNull();
+    expect(await r.reason({ image: Buffer.from(''), entities, sceneGraph: { spatial: [], semantic: [] }, imageType: 'screen_ui' })).toBeNull();
   });
 
   it('parses valid reasoning', async () => {
     const vlm = new FakeVLM('{"summary":"A login screen","reasoning_confidence":0.9}');
-    const out = await new Reasoner(vlm).reason(
-      Buffer.from(''),
+    const out = await new Reasoner(vlm).reason({
+      image: Buffer.from(''),
       entities,
-      { spatial: [], semantic: [] },
-      'screen_ui',
-    );
+      sceneGraph: { spatial: [], semantic: [] },
+      imageType: 'screen_ui',
+    });
     expect(out?.summary).toBe('A login screen');
     expect(out?.reasoningConfidence).toBe(0.9);
   });
 
   it('falls back to raw text on invalid JSON', async () => {
     const vlm = new FakeVLM('This shows a form.');
-    const out = await new Reasoner(vlm).reason(
-      Buffer.from(''),
+    const out = await new Reasoner(vlm).reason({
+      image: Buffer.from(''),
       entities,
-      { spatial: [], semantic: [] },
-      'screen_ui',
-    );
+      sceneGraph: { spatial: [], semantic: [] },
+      imageType: 'screen_ui',
+    });
     expect(out?.summary).toContain('form');
   });
 
@@ -197,12 +197,12 @@ describe('Reasoner', () => {
         reasoning_confidence: 0.8,
       }),
     );
-    const out = await new Reasoner(vlm).reason(
-      Buffer.from(''),
+    const out = await new Reasoner(vlm).reason({
+      image: Buffer.from(''),
       entities,
-      { spatial: [], semantic: [] },
-      'screen_ui',
-    );
+      sceneGraph: { spatial: [], semantic: [] },
+      imageType: 'screen_ui',
+    });
     expect(out?.thinkingTrace).toBeDefined();
     expect(out?.thinkingTrace).toHaveLength(6);
     expect(out?.thinkingTrace![0]!.phase).toBe('observe');
@@ -221,12 +221,12 @@ describe('Reasoner', () => {
         summary: 'test',
       }),
     );
-    const out = await new Reasoner(vlm).reason(
-      Buffer.from(''),
+    const out = await new Reasoner(vlm).reason({
+      image: Buffer.from(''),
       entities,
-      { spatial: [], semantic: [] },
-      'screen_ui',
-    );
+      sceneGraph: { spatial: [], semantic: [] },
+      imageType: 'screen_ui',
+    });
     expect(out?.thinkingTrace).toHaveLength(1);
     expect(out?.thinkingTrace![0]!.phase).toBe('observe');
   });
@@ -273,3 +273,4 @@ describe('ImageProcessor SSRF protection', () => {
     await expect(proc.assertUrlSafe('http://127.0.0.1/x.jpg')).rejects.toThrow(/SSRF|blocked/);
   });
 });
+

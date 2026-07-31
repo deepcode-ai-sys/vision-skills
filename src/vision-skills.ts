@@ -177,12 +177,14 @@ export class VisionSkills {
         : Promise.resolve([] as SceneGraph['semantic']);
 
       const reasonerPromise = wantReasoner
-        ? new Reasoner(this.vlm).reason(
-            buffer,
+        ? new Reasoner(this.vlm).reason({
+            image: buffer,
             entities,
-            { spatial: spatialEdges, semantic: [] },
-            effectiveType,
-          )
+            sceneGraph: { spatial: spatialEdges, semantic: [] },
+            imageType: effectiveType,
+            tables,
+            code,
+          })
         : Promise.resolve(null);
 
       [semanticEdges, reasonerOutput] = await Promise.all([semanticPromise, reasonerPromise]);
