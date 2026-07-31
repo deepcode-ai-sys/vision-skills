@@ -36,6 +36,8 @@ export interface GeminiCallOptions {
   model: string;
   prompt: string;
   imageBase64: string;
+  /** MIME type of the image bytes. Defaults to 'image/jpeg'. */
+  mimeType?: string;
   timeoutMs?: number;
   /** Ask Gemini to return JSON (sets responseMimeType). */
   jsonOutput?: boolean;
@@ -78,7 +80,7 @@ function parseRetryAfterMs(retryAfter: string | null): number | undefined {
 
 /** Call Gemini generateContent with an image + prompt, return the text. */
 export async function callGemini(opts: GeminiCallOptions): Promise<string> {
-  const { keyPool, model, prompt, imageBase64, timeoutMs = 20000, jsonOutput } = opts;
+  const { keyPool, model, prompt, imageBase64, mimeType, timeoutMs = 20000, jsonOutput } = opts;
   const baseDelay = opts.retry?.baseDelayMs ?? 500;
   const maxDelay = opts.retry?.maxDelayMs ?? 8000;
 
@@ -91,7 +93,7 @@ export async function callGemini(opts: GeminiCallOptions): Promise<string> {
     contents: [
       {
         parts: [
-          { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } },
+          { inline_data: { mime_type: mimeType ?? 'image/jpeg', data: imageBase64 } },
           { text: prompt },
         ],
       },

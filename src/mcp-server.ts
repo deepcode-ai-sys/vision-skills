@@ -118,10 +118,16 @@ async function main() {
         const args = (params?.arguments ?? {}) as Record<string, unknown>;
 
         try {
-          const vision = new VisionSkills();
+          // All Gemini keys from env (single or comma-separated), for rotation.
+          const allKeys = [
+            ...(process.env.GEMINI_API_KEY ?? '').split(',').map((k) => k.trim()),
+            ...(process.env.GEMINI_API_KEYS ?? '').split(',').map((k) => k.trim()),
+          ].filter(Boolean);
+
           let result: string;
 
           if (name === 'health') {
+            const vision = new VisionSkills({ geminiApiKeys: allKeys });
             const health = await vision.healthCheck();
             result = JSON.stringify(health, null, 2);
           } else if (name === 'clipboard') {
@@ -129,7 +135,8 @@ async function main() {
             const isWin = process.platform === 'win32';
             let b64 = '';
             if (isWin) {
-              const psCommand = `
+              // Use -EncodedCommand (base64 UTF-16LE) to avoid all quoting/escaping issues
+              const psScript = `
 Add-Type -AssemblyName System.Windows.Forms
 $img = [System.Windows.Forms.Clipboard]::GetImage()
 if ($img -ne $null) {
@@ -140,8 +147,9 @@ if ($img -ne $null) {
 } else {
   Write-Output "ERROR:No image in clipboard"
 }`;
+              const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
               const output = execSync(
-                `powershell -NoProfile -Command "${psCommand.replace('"', '\\"').replace('\n', ';')}"`,
+                `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
                 { timeout: 10000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
               ).trim();
 
@@ -186,9 +194,9 @@ if ($img -ne $null) {
             const mode = (args.mode as string) ?? 'standard';
             const depth = (args.depth as string) ?? 'fast';
 
-            // Create a one-off config with the requested depth
+            // Pass ALL keys so rotation works, plus the requested depth.
             const v = new VisionSkills({
-              geminiApiKey: process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS?.split(',')[0],
+              geminiApiKeys: allKeys,
               analysisDepth: depth as 'fast' | 'deep',
             });
 

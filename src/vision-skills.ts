@@ -161,13 +161,15 @@ export class VisionSkills {
     // Assign UI/layout hierarchy (parentId) from containment relationships.
     SpatialGraphBuilder.assignHierarchy(entities);
 
-    // 7b/8. Semantic + reasoner (VLM, Advanced/Full only).
-    // Run them in PARALLEL to cut latency: the reasoner works from spatial
+    // 7b. Semantic graph (VLM, Advanced/Full only — most expensive).
+    // 8.  Reasoner (VLM, Standard and above — fable-style thinking).
+    // They run in PARALLEL to cut latency; the reasoner works from spatial
     // relations + entities and does not strictly need semantic edges first.
     let semanticEdges: SceneGraph['semantic'] = [];
     let reasonerOutput = null;
-    if (VLM_MODES.has(mode) && this.vlm) {
-      const wantSemantic = this.config.enableSemanticRelationships;
+    if (this.vlm) {
+      const wantSemantic =
+        VLM_MODES.has(mode) && this.config.enableSemanticRelationships;
       const wantReasoner = enableReasoner;
 
       const semanticPromise = wantSemantic

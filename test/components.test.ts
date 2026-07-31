@@ -180,6 +180,56 @@ describe('Reasoner', () => {
     );
     expect(out?.summary).toContain('form');
   });
+
+  it('parses fable-style thinking trace', async () => {
+    const vlm = new FakeVLM(
+      JSON.stringify({
+        thinking_trace: [
+          { phase: 'observe', content: 'A window with "Login" and "Password" fields.' },
+          { phase: 'ground', content: '"Login" is OBSERVED; the button state is ASSUMED.' },
+          { phase: 'hypothesize', content: 'H1: login screen. H2: signup screen.' },
+          { phase: 'verify', content: '"Login" label discriminates: H1 wins.' },
+          { phase: 'self_review', content: 'Button text might be truncated.' },
+          { phase: 'deliver', content: 'This is a login screen.' },
+        ],
+        summary: 'A login screen',
+        open_questions: ['Button enabled state not visible'],
+        reasoning_confidence: 0.8,
+      }),
+    );
+    const out = await new Reasoner(vlm).reason(
+      Buffer.from(''),
+      entities,
+      { spatial: [], semantic: [] },
+      'screen_ui',
+    );
+    expect(out?.thinkingTrace).toBeDefined();
+    expect(out?.thinkingTrace).toHaveLength(6);
+    expect(out?.thinkingTrace![0]!.phase).toBe('observe');
+    expect(out?.thinkingTrace![3]!.phase).toBe('verify');
+    expect(out?.openQuestions).toEqual(['Button enabled state not visible']);
+  });
+
+  it('rejects invalid thinking trace phases', async () => {
+    const vlm = new FakeVLM(
+      JSON.stringify({
+        thinking_trace: [
+          { phase: 'observe', content: 'valid step' },
+          { phase: 'bogus_phase', content: 'should be dropped' },
+          { phase: 'hypothesize', content: '' },
+        ],
+        summary: 'test',
+      }),
+    );
+    const out = await new Reasoner(vlm).reason(
+      Buffer.from(''),
+      entities,
+      { spatial: [], semantic: [] },
+      'screen_ui',
+    );
+    expect(out?.thinkingTrace).toHaveLength(1);
+    expect(out?.thinkingTrace![0]!.phase).toBe('observe');
+  });
 });
 
 describe('SpatialGraphBuilder', () => {

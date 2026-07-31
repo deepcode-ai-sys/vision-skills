@@ -244,12 +244,26 @@ export interface ActionHint {
   reason: string;
 }
 
+/** One step in the fable-style thinking trace. */
+export interface ThinkingStep {
+  phase: 'observe' | 'ground' | 'hypothesize' | 'verify' | 'self_review' | 'deliver';
+  content: string;
+}
+
 export interface ReasonerOutput {
   summary: string;
   uiStateInterpretation?: string | null;
   actionHints: ActionHint[];
   anomalies: string[];
   reasoningConfidence: number;
+  /**
+   * Fable-style thinking trace: observe → ground → hypothesize → verify →
+   * self_review → deliver. Lets a text-only model see HOW the conclusion was
+   * reached, not just the conclusion.
+   */
+  thinkingTrace?: ThinkingStep[];
+  /** Claims we could not fully verify (weakest links), stated honestly. */
+  openQuestions?: string[];
 }
 
 // ============================================================================
