@@ -40,9 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   ordered key-pool input with cooldown and retry behavior.
 
 ### Changed
-- Node.js >=20.9 is now the supported runtime and CI floor.
+- Node.js >=20.18 is now the supported runtime and CI floor.
 - The optional Fastify peer and development server now require secure Fastify 5
-  (`^5.11.0`), and the test stack uses Vitest 4 with a Node 20.9-compatible Vite 6.
+  (`^5.11.0`), and the test stack uses Vitest 4 with a Node 20.18-compatible Vite 6.
 - The SDK default mode is now true `auto`; explicit `basic`, `standard`,
   `advanced`, and `full` requests remain available. Auto selects `basic` for a
   confident simple document and otherwise fails safe to `standard`.

@@ -6,7 +6,7 @@ No specialist models are bundled. PaddleOCR, Docling, OmniParser, and OpenAI-com
 
 ## Quick Setup
 
-Clone the repository, then run the platform setup script from any working directory. It validates Node.js >=20.9, installs dependencies from the local lockfile/package, builds the project locally, and configures supported clients to run the clone's absolute `dist/mcp-server.js` with Node.
+Clone the repository, then run the platform setup script from any working directory. It validates Node.js >=20.18, installs dependencies from the local lockfile/package, builds the project locally, and configures supported clients to run the clone's absolute `dist/mcp-server.js` with Node.
 
 Windows (primary setup path):
 
@@ -32,7 +32,7 @@ npm install vision-skills
 
 Requirements:
 
-- Node.js >=20.9
+- Node.js >=20.18
 - A Gemini API key for the built-in OCR/detection path, an explicit specialist OCR replacement, or `useMockProviders: true` for tests
 - Fastify 5 (`^5.11.0`) only when using `vision-skills/server` (optional peer dependency)
 
@@ -326,7 +326,7 @@ See `benchmark/README.md` for metric definitions and profile semantics.
 
 ## Production Audit Status
 
-The current package includes automated tests for schema validation, specialist fallback/composition, MCP protocol behavior, output bounds, URL blocking, REST authentication, CORS preflight, remote path rejection, concurrency, and cancellation/timeouts. CI covers Node 20.9, 22, and 24 and performs type checking, linting, build, tests, the deterministic mock benchmark, package dry-run validation, and installed-tarball import/binary/benchmark smoke tests.
+The current package includes automated tests for schema validation, specialist fallback/composition, MCP protocol behavior, output bounds, URL blocking, REST authentication, CORS preflight, remote path rejection, concurrency, and cancellation/timeouts. CI covers Node 20.18, 22, and 24 and performs type checking, linting, build, tests, the deterministic mock benchmark, package dry-run validation, and installed-tarball import/binary/benchmark smoke tests.
 
 This is not a claim of full production readiness. There has been no documented independent security audit or penetration test, no committed live-provider accuracy evaluation, and no production SLO/load or failover certification. Before deployment, validate chosen providers and models on representative data, review privacy/retention requirements, constrain egress and URL inputs, use a shared cache deliberately, terminate TLS, add infrastructure rate limits/observability, and test cancellation and failure behavior under load.
 

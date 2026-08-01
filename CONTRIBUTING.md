@@ -4,7 +4,7 @@ Vision Skills turns images into structured JSON through a provider-agnostic pipe
 
 ## Development Setup
 
-Use Node.js >=20.9.
+Use Node.js >=20.18.
 
 ```bash
 git clone https://github.com/deepcode-ai-sys/vision-skills.git
@@ -18,7 +18,7 @@ npm run benchmark:mock
 npm pack --dry-run
 ```
 
-CI runs these checks on Node 20.9, 22, and 24. Tests and the mock benchmark must not require live provider credentials.
+CI runs these checks on Node 20.18, 22, and 24. Tests and the mock benchmark must not require live provider credentials.
 
 ## Project Structure
 

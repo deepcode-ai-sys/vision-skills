@@ -82,7 +82,7 @@
   },
   "homepage": "https://github.com/deepcode-ai-sys/vision-skills#readme",
   "engines": {
-    "node": ">=20.9"
+    "node": ">=20.18"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
