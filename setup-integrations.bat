@@ -3,20 +3,33 @@ setlocal EnableExtensions DisableDelayedExpansion
 chcp 65001 >nul
 title Vision Skills Integration Setup
 
-set "VERSION=1.1"
+set "VERSION=1.2"
 set "SCRIPT_DIR=%~dp0"
 set "MERGER=%~dp0scripts\add-json-mcp.mjs"
+set "VERSION_CHECK=%~dp0scripts\check-node-version.mjs"
+set "MCP_ENTRY=%~dp0dist\mcp-server.js"
 
 where node >nul 2>nul || (
   echo Error: Node.js is required. Install it from https://nodejs.org
   exit /b 1
 )
-where npx >nul 2>nul || (
-  echo Error: npx is required. Reinstall Node.js from https://nodejs.org
+node "%VERSION_CHECK%" || exit /b 1
+where npm >nul 2>nul || (
+  echo Error: npm is required. Reinstall Node.js from https://nodejs.org
   exit /b 1
 )
 if not exist "%MERGER%" (
   echo Error: missing setup helper: "%MERGER%"
+  exit /b 1
+)
+echo Installing local dependencies...
+set "INSTALL_COMMAND=install"
+if exist "%SCRIPT_DIR%package-lock.json" if not exist "%SCRIPT_DIR%node_modules\" set "INSTALL_COMMAND=ci"
+call npm %INSTALL_COMMAND% --prefix "%SCRIPT_DIR%." || exit /b 1
+echo Building the local MCP server...
+call npm run build --prefix "%SCRIPT_DIR%." || exit /b 1
+if not exist "%MCP_ENTRY%" (
+  echo Error: build did not create "%MCP_ENTRY%"
   exit /b 1
 )
 
@@ -53,6 +66,7 @@ echo 0. Exit
 echo.
 set "CHOICE="
 set /p "CHOICE=Select: "
+if errorlevel 1 exit /b 0
 if "%CHOICE%"=="1" goto OPENCODE
 if "%CHOICE%"=="2" goto CLAUDE
 if "%CHOICE%"=="3" goto CODEX
@@ -67,9 +81,13 @@ goto MENU
 
 :RUN_MERGER
 set "VISION_SKILLS_SETUP_KEY=%GEMINI_KEY%"
+set "VISION_SKILLS_MCP_COMMAND=node"
+set "VISION_SKILLS_MCP_ENTRY=%MCP_ENTRY%"
 node "%MERGER%" "%TARGET_CONFIG%" "%TARGET_FORMAT%"
 set "MERGE_RESULT=%errorlevel%"
 set "VISION_SKILLS_SETUP_KEY="
+set "VISION_SKILLS_MCP_COMMAND="
+set "VISION_SKILLS_MCP_ENTRY="
 if not "%MERGE_RESULT%"=="0" goto FAILED
 echo Restart the configured client to load the MCP server.
 pause
@@ -94,7 +112,7 @@ where codex >nul 2>nul || (
   pause
   goto MENU
 )
-call codex mcp add vision-skills --env "GEMINI_API_KEYS=%GEMINI_KEY%" -- npx -y --package vision-skills vision-skills-mcp
+call codex mcp add vision-skills --env "GEMINI_API_KEYS=%GEMINI_KEY%" -- node "%MCP_ENTRY%"
 if errorlevel 1 (
   echo Codex may already contain vision-skills. Check with: codex mcp list
   pause
@@ -110,12 +128,12 @@ set "TARGET_FORMAT=standard"
 goto RUN_MERGER
 
 :CONTINUE
-set "TARGET_CONFIG=%CD%\.continue\mcpServers\vision-skills.json"
+set "TARGET_CONFIG=%SCRIPT_DIR%.continue\mcpServers\vision-skills.json"
 set "TARGET_FORMAT=continue"
 goto RUN_MERGER
 
 :VSCODE
-set "TARGET_CONFIG=%CD%\.vscode\mcp.json"
+set "TARGET_CONFIG=%SCRIPT_DIR%.vscode\mcp.json"
 set "TARGET_FORMAT=vscode"
 goto RUN_MERGER
 
@@ -134,9 +152,9 @@ call :CONFIGURE_ONE "%USERPROFILE%\.claude.json" standard
 if errorlevel 1 goto FAILED
 call :CONFIGURE_ONE "%USERPROFILE%\.cursor\mcp.json" standard
 if errorlevel 1 goto FAILED
-call :CONFIGURE_ONE "%CD%\.continue\mcpServers\vision-skills.json" continue
+call :CONFIGURE_ONE "%SCRIPT_DIR%.continue\mcpServers\vision-skills.json" continue
 if errorlevel 1 goto FAILED
-call :CONFIGURE_ONE "%CD%\.vscode\mcp.json" vscode
+call :CONFIGURE_ONE "%SCRIPT_DIR%.vscode\mcp.json" vscode
 if errorlevel 1 goto FAILED
 call :CONFIGURE_ONE "%USERPROFILE%\.cline\mcp.json" standard
 if errorlevel 1 goto FAILED
@@ -146,9 +164,13 @@ goto MENU
 
 :CONFIGURE_ONE
 set "VISION_SKILLS_SETUP_KEY=%GEMINI_KEY%"
+set "VISION_SKILLS_MCP_COMMAND=node"
+set "VISION_SKILLS_MCP_ENTRY=%MCP_ENTRY%"
 node "%MERGER%" "%~1" "%~2"
 set "MERGE_RESULT=%errorlevel%"
 set "VISION_SKILLS_SETUP_KEY="
+set "VISION_SKILLS_MCP_COMMAND="
+set "VISION_SKILLS_MCP_ENTRY="
 exit /b %MERGE_RESULT%
 
 :ENV

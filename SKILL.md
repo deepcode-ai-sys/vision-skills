@@ -5,7 +5,7 @@ description: "Use when the user asks you to analyze, describe, read, or extract 
 
 # Vision Skills
 
-Use the registered `vision-skills` MCP tools directly when the user provides or refers to an image. Do not start another server or manually send JSON-RPC through the shell. If the tools are unavailable, state that the MCP integration is not connected, ask the user to run the platform setup script, and have them restart the client.
+Use the registered `vision-skills` MCP tools directly when the user provides or refers to an image. Do not start another server or manually send JSON-RPC through the shell. If the tools are unavailable, state that the MCP integration is not connected, ask the user to run `setup-integrations.bat` on Windows or `setup-integrations.sh` on macOS/Linux from the repository root, and have them restart the client. The setup installs dependencies, builds locally, and configures the client to run the clone's absolute MCP entry path.
 
 ## Tools
 

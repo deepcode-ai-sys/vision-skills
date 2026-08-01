@@ -59,6 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and production-audit limitations without claiming production readiness.
 
 ### Fixed
+- Integration setup now installs and builds the cloned package locally and
+  configures clients to run the absolute local MCP entry instead of depending
+  on an unpublished npm package.
 - Directional and near scene-graph edges are bounded to nearest neighbors;
   containment and overlap continue to use all relevant pairs.
 - Semantic relation taxonomies now follow effective image type: physical for

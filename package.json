@@ -33,6 +33,7 @@
     "setup-integrations.bat",
     "setup-integrations.sh",
     "scripts/add-json-mcp.mjs",
+    "scripts/check-node-version.mjs",
     "benchmark/README.md",
     "benchmark/run.mjs",
     "benchmark/manifest.json",

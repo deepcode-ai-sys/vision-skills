@@ -4,7 +4,27 @@
 
 No specialist models are bundled. PaddleOCR, Docling, OmniParser, and OpenAI-compatible local multimodal models run as services that you configure.
 
-## Install
+## Quick Setup
+
+Clone the repository, then run the platform setup script from any working directory. It validates Node.js >=20.9, installs dependencies from the local lockfile/package, builds the project locally, and configures supported clients to run the clone's absolute `dist/mcp-server.js` with Node.
+
+Windows (primary setup path):
+
+```bat
+git clone https://github.com/deepcode-ai-sys/vision-skills.git
+vision-skills\setup-integrations.bat
+```
+
+macOS/Linux:
+
+```bash
+git clone https://github.com/deepcode-ai-sys/vision-skills.git
+./vision-skills/setup-integrations.sh
+```
+
+Restart the configured client afterward. Keep the clone in place because client configuration points to its local MCP entry file.
+
+The npm registry install below will be available only after `vision-skills` is published:
 
 ```bash
 npm install vision-skills
@@ -232,9 +252,7 @@ Specialist endpoints are trusted operator configuration. Localhost is intentiona
 
 ## MCP Server
 
-```bash
-npx -y --package vision-skills vision-skills-mcp
-```
+After local setup, the server entry is `dist/mcp-server.js` and clients run it with Node using its absolute path.
 
 The server uses `@modelcontextprotocol/sdk`, stdio transport, registered tools, Zod input schemas, and standards-compliant structured tool errors.
 
@@ -247,7 +265,7 @@ The server uses `@modelcontextprotocol/sdk`, stdio transport, registered tools, 
 
 Analysis forwards MCP cancellation to image/provider work and emits progress notifications when the client supplies a progress token. Analysis and health output defaults to a 200,000-character serialized-payload bound (`maxOutputChars`) and includes a fixed numeric `truncation` metadata envelope: untruncated output is under `data`; truncated output is under `json`. The bound is not a strict limit on the complete MCP wire message and does not limit provider work or in-memory response construction. The fixed envelope contains no user-provided strings. Clipboard images instead use lossless MCP image content and the separate byte cap described above; clients should expose that image content for direct analysis or mediate a subsequent analysis call rather than expect a data URI.
 
-Run `setup-integrations.bat` on Windows or `./setup-integrations.sh` on macOS/Linux to merge the MCP command into supported client configuration. Restart the client afterward.
+The setup scripts securely merge the local MCP command into supported client configuration while preserving unrelated fields. The Gemini key is supplied to JSON clients through the MCP server environment rather than the command arguments.
 
 ## REST Server
 

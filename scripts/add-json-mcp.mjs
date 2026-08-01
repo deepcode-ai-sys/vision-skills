@@ -1,13 +1,20 @@
 #!/usr/bin/env node
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, isAbsolute } from 'node:path';
 
-const [configPath, format, keyArgument] = process.argv.slice(2);
-const apiKey = keyArgument || process.env.VISION_SKILLS_SETUP_KEY;
+const [configPath, format, commandArgument, entryArgument] = process.argv.slice(2);
+const apiKey = process.env.VISION_SKILLS_SETUP_KEY;
+const mcpCommand = commandArgument || process.env.VISION_SKILLS_MCP_COMMAND;
+const mcpEntry = entryArgument || process.env.VISION_SKILLS_MCP_ENTRY;
 
-if (!configPath || !format || !apiKey) {
-  console.error('Usage: VISION_SKILLS_SETUP_KEY=... node add-json-mcp.mjs <config-path> <opencode|standard|vscode|continue>');
+if (!configPath || !format || !apiKey || !mcpCommand || !mcpEntry) {
+  console.error('Usage: VISION_SKILLS_SETUP_KEY=... node add-json-mcp.mjs <config-path> <opencode|standard|vscode|continue> [command] [absolute-mcp-entry]');
+  process.exit(2);
+}
+
+if (!isAbsolute(mcpEntry)) {
+  console.error(`MCP entry path must be absolute: ${mcpEntry}`);
   process.exit(2);
 }
 
@@ -23,8 +30,8 @@ try {
 }
 
 const stdioServer = {
-  command: 'npx',
-  args: ['-y', '--package', 'vision-skills', 'vision-skills-mcp'],
+  command: mcpCommand,
+  args: [mcpEntry],
   env: { GEMINI_API_KEYS: apiKey },
 };
 
@@ -33,7 +40,7 @@ if (format === 'opencode') {
   config.mcp ??= {};
   config.mcp['vision-skills'] = {
     type: 'local',
-    command: ['npx', '-y', '--package', 'vision-skills', 'vision-skills-mcp'],
+    command: [mcpCommand, mcpEntry],
     enabled: true,
     env: { GEMINI_API_KEYS: apiKey },
   };
