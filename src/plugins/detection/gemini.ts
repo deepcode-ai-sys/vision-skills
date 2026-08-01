@@ -46,12 +46,12 @@ export class GeminiDetectionPlugin extends BasePlugin {
       image,
       context,
       this.perAttemptTimeoutMs,
-      { depth: this.depth },
+      { depth: context.analysisDepth ?? this.depth },
     );
     const objects = combined.objects;
     const overall =
       objects.length > 0 ? objects.reduce((s, o) => s + o.confidence, 0) / objects.length : 0;
-    return { confidence: Math.round(overall * 1000) / 1000, objects };
+    return { confidence: Math.round(overall * 1000) / 1000, objects, warnings: combined.warnings };
   }
 
   async healthCheck(): Promise<boolean> {

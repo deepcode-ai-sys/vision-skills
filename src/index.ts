@@ -8,8 +8,7 @@
  * import { VisionSkills } from 'vision-skills';
  *
  * const vision = new VisionSkills({
- *   googleCloudVisionKey: process.env.GOOGLE_CLOUD_VISION_KEY,
-  *   googleCloudVisionKey: process.env.GOOGLE_CLOUD_VISION_KEY,
+ *   geminiApiKey: process.env.GEMINI_API_KEY,
  * });
  *
  * const result = await vision.analyze('./screenshot.png', { mode: 'standard' });
@@ -18,7 +17,47 @@
  */
 
 export { VisionSkills, type AnalyzeOptions } from './vision-skills.js';
-export { type VisionSkillsConfig, resolveConfig } from './config.js';
+export { type VisionSkillsConfig, type ResolvedConfig, resolveConfig } from './config.js';
+export { ModeRouter } from './core/router.js';
+export { SpecialistRegistry, SpecialistRouter } from './specialists/router.js';
+export { SpecialistOrchestrator } from './specialists/orchestrator.js';
+export { HttpSpecialistProvider, redactHeaders, type SpecialistProvider } from './specialists/http.js';
+export {
+  CanonicalV1Codec,
+  PaddleOcrClassicCodec,
+  DoclingJsonCodec,
+  OmniParserV2Codec,
+  OpenAiChatCompletionsCodec,
+  createSpecialistCodec,
+  type SpecialistCodec,
+} from './specialists/codecs.js';
+export { composeSpecialists } from './specialists/compose.js';
+export {
+  characterErrorRate,
+  wordErrorRate,
+  boxIou,
+  boxPrecisionRecallF1,
+  labeledBoxPrecisionRecallF1,
+  percentile,
+  type BoxMetric,
+  type LabeledBox,
+} from './benchmark/metrics.js';
+export {
+  SPECIALIST_CAPABILITIES,
+  SPECIALIST_PROTOCOLS,
+  canonicalV1Schema,
+  emptyCanonicalOutput,
+  type SpecialistCapability,
+  type SpecialistProtocol,
+  type SpecialistProviderConfig,
+  type SpecialistRouteConfig,
+  type SpecialistsConfig,
+  type SpecialistCanonicalOutput,
+  type SpecialistRouteTrace,
+  type SpecialistCallMetric,
+  type SpecialistUsage,
+  type SpecialistRunResult,
+} from './specialists/types.js';
 
 // Core types
 export {
@@ -26,11 +65,14 @@ export {
   SCHEMA_VERSION,
   IMAGE_TYPES,
   PROCESSING_MODES,
+  REQUESTED_MODES,
   PLUGIN_TYPES,
   SPATIAL_RELATIONS,
   SEMANTIC_RELATIONS,
   type ImageType,
   type ProcessingMode,
+  type RequestedMode,
+  type ModePolicy,
   type PluginType,
   type SpatialRelation,
   type SemanticRelation,
@@ -48,6 +90,9 @@ export {
   type ActionHint,
   type PluginResult,
   type VisionResponse,
+  type ResponseProvenance,
+  type RequestTelemetry,
+  type GeminiTelemetry,
   type ClassificationResult,
   type ModeSelection,
   type RequestContext,
@@ -74,9 +119,6 @@ export { GeminiOCRPlugin } from './plugins/ocr/gemini.js';
 export { GeminiDetectionPlugin } from './plugins/detection/gemini.js';
 export { GeminiVLMClient } from './plugins/vlm/gemini.js';
 export { GeminiKeyPool } from './plugins/gemini/key-pool.js';
- // Paid alternatives:
-export { GoogleVisionOCRPlugin } from './plugins/ocr/google-vision.js';
-export { GoogleVisionDetectionPlugin } from './plugins/detection/google-vision.js';
 // Local (free):
 export { RuleBasedUIPlugin } from './plugins/ui/rulebased.js';
 export { MockOCRPlugin, MockDetectionPlugin, MockUIPlugin } from './plugins/mock.js';

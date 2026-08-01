@@ -1,233 +1,164 @@
-﻿@echo off
+@echo off
+setlocal EnableExtensions DisableDelayedExpansion
 chcp 65001 >nul
 title Vision Skills Integration Setup
-setlocal enabledelayedexpansion
 
-set VERSION=1.0
+set "VERSION=1.1"
+set "SCRIPT_DIR=%~dp0"
+set "MERGER=%~dp0scripts\add-json-mcp.mjs"
 
-:GETKEY
-cls
-echo ============================================
-echo    Vision Skills v%VERSION% - Setup Integrations
-echo    Give text-only AI models the ability to see images
-echo ============================================
-echo.
-echo  You need a Gemini API key (free, no credit card required).
-echo  Get one at: https://aistudio.google.com/apikey
-echo.
-set /p GEMINI_KEY="Enter your Gemini API key: "
-
-if "%GEMINI_KEY%"=="" (
-    echo [!] Key cannot be empty.
-    pause
-    goto GETKEY
+where node >nul 2>nul || (
+  echo Error: Node.js is required. Install it from https://nodejs.org
+  exit /b 1
 )
-if not "%GEMINI_KEY:~0,4%"=="AIza" (
-    echo [!] Invalid key format. Gemini keys start with 'AIza...'
-    pause
-    goto GETKEY
+where npx >nul 2>nul || (
+  echo Error: npx is required. Reinstall Node.js from https://nodejs.org
+  exit /b 1
+)
+if not exist "%MERGER%" (
+  echo Error: missing setup helper: "%MERGER%"
+  exit /b 1
 )
 
-:: Build
+:GET_KEY
 cls
-echo.
-echo  Building vision-skills from local source...
-cd /d "%~dp0"
-call npm install 2>nul
-call npm run build 2>nul
-echo  + Build complete.
+echo Vision Skills v%VERSION% integration setup
+echo Get a free Gemini API key at https://aistudio.google.com/apikey
+set "GEMINI_KEY="
+set /p "GEMINI_KEY=Gemini API key: "
+if errorlevel 1 exit /b 1
+if not defined GEMINI_KEY goto INVALID_KEY
+if /i not "%GEMINI_KEY:~0,4%"=="AIza" goto INVALID_KEY
+goto MENU
+
+:INVALID_KEY
+echo Invalid key format. Gemini API keys normally start with AIza.
+pause
+goto GET_KEY
 
 :MENU
 cls
-echo ============================================
-echo    Vision Skills v%VERSION%
-echo    Key: %GEMINI_KEY:~0,12%... (saved)
-echo ============================================
+echo Vision Skills v%VERSION%
 echo.
-echo  Select platform to integrate:
+echo 1. OpenCode
+echo 2. Claude Code
+echo 3. OpenAI Codex CLI
+echo 4. Cursor
+echo 5. Continue
+echo 6. VS Code / GitHub Copilot
+echo 7. Cline
+echo A. Configure all supported clients
+echo B. Save key as a user environment variable
+echo 0. Exit
 echo.
-echo  [1]  OpenCode
-echo  [2]  Claude Code CLI
-echo  [3]  OpenAI Codex CLI
-echo  [4]  Cursor
-echo  [5]  Continue
-echo  [6]  GitHub Copilot
-echo  [7]  VS Code
-echo  [8]  Cline / Roo / Kilo Code
-echo  [9]  9Router
-echo  [A]  All
-echo  [B]  Set env only
-echo  [0]  Exit
-echo.
-set /p choice="Select (0-9, A, B): "
-
-if "%choice%"=="0" goto EOF
-if "%choice%"=="1" goto SETUP_OPENCODE
-if "%choice%"=="2" goto SETUP_CLAUDE
-if "%choice%"=="3" goto SETUP_CODEX
-if "%choice%"=="4" goto SETUP_CURSOR
-if "%choice%"=="5" goto SETUP_CONTINUE
-if "%choice%"=="6" goto SETUP_COPILOT
-if "%choice%"=="7" goto SETUP_VSCODE
-if "%choice%"=="8" goto SETUP_CLINE
-if "%choice%"=="9" goto SETUP_9ROUTER
-if /i "%choice%"=="A" goto SETUP_ALL
-if /i "%choice%"=="B" goto SETUP_ENV
+set "CHOICE="
+set /p "CHOICE=Select: "
+if "%CHOICE%"=="1" goto OPENCODE
+if "%CHOICE%"=="2" goto CLAUDE
+if "%CHOICE%"=="3" goto CODEX
+if "%CHOICE%"=="4" goto CURSOR
+if "%CHOICE%"=="5" goto CONTINUE
+if "%CHOICE%"=="6" goto VSCODE
+if "%CHOICE%"=="7" goto CLINE
+if /i "%CHOICE%"=="A" goto ALL
+if /i "%CHOICE%"=="B" goto ENV
+if "%CHOICE%"=="0" exit /b 0
 goto MENU
 
-:SETUP_OPENCODE
-cls
-echo.
-echo --- OpenCode ---
-:: Copy SKILL.md
-set ODIR=%USERPROFILE%\.config\opencode\skills\vision-skills
-if not exist "%ODIR%" mkdir "%ODIR%"
-if exist ".\SKILL.md" copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul && echo + SKILL.md copied
-:: Add MCP config via PowerShell script
-set SERVER_PATH=%~dp0dist\mcp-server.js
-powershell -ExecutionPolicy Bypass -File "%~dp0scripts\add-mcp-config.ps1" -ConfigPath "%USERPROFILE%\.config\opencode\opencode.json" -ApiKey "%GEMINI_KEY%" -ServerPath "%SERVER_PATH%"
-echo + Done. Restart OpenCode.
+:RUN_MERGER
+set "VISION_SKILLS_SETUP_KEY=%GEMINI_KEY%"
+node "%MERGER%" "%TARGET_CONFIG%" "%TARGET_FORMAT%"
+set "MERGE_RESULT=%errorlevel%"
+set "VISION_SKILLS_SETUP_KEY="
+if not "%MERGE_RESULT%"=="0" goto FAILED
+echo Restart the configured client to load the MCP server.
 pause
 goto MENU
 
-:SETUP_CLAUDE
-cls
-echo.
-echo --- Claude Code CLI ---
-set CFG=%USERPROFILE%\.claude\claude.json
-if not exist "%USERPROFILE%\.claude" mkdir "%USERPROFILE%\.claude"
-if not exist "%CFG%" (
-    powershell -Command "@{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = '%GEMINI_KEY%' } } } } | ConvertTo-Json -Depth 10 | Set-Content '%CFG%' -Encoding UTF8"
-    echo + Config created
-) else echo + File exists. Add MCP manually.
-pause
-goto MENU
+:OPENCODE
+set "SKILL_DIR=%USERPROFILE%\.config\opencode\skills\vision-skills"
+if not exist "%SKILL_DIR%" mkdir "%SKILL_DIR%" || goto FAILED
+copy /Y "%SCRIPT_DIR%SKILL.md" "%SKILL_DIR%\SKILL.md" >nul || goto FAILED
+set "TARGET_CONFIG=%USERPROFILE%\.config\opencode\opencode.json"
+set "TARGET_FORMAT=opencode"
+goto RUN_MERGER
 
-:SETUP_CODEX
-cls
-echo.
-echo --- OpenAI Codex CLI ---
-set CFG=%USERPROFILE%\.codex\config.json
-if not exist "%USERPROFILE%\.codex" mkdir "%USERPROFILE%\.codex"
-if not exist "%CFG%" (
-    powershell -Command "@{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = '%GEMINI_KEY%' } } } } | ConvertTo-Json -Depth 10 | Set-Content '%CFG%' -Encoding UTF8"
-    echo + Config created
-) else echo + File exists.
-pause
-goto MENU
+:CLAUDE
+set "TARGET_CONFIG=%USERPROFILE%\.claude.json"
+set "TARGET_FORMAT=standard"
+goto RUN_MERGER
 
-:SETUP_CURSOR
-cls
-echo.
-echo --- Cursor ---
-set CFG=%USERPROFILE%\.cursor\mcp.json
-if not exist "%USERPROFILE%\.cursor" mkdir "%USERPROFILE%\.cursor"
-if not exist "%CFG%" (
-    powershell -Command "@{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = '%GEMINI_KEY%' } } } } | ConvertTo-Json -Depth 10 | Set-Content '%CFG%' -Encoding UTF8"
-    echo + Config created
-) else echo + File exists.
-pause
-goto MENU
-
-:SETUP_CONTINUE
-cls
-echo.
-echo --- Continue ---
-set CFG=%USERPROFILE%\.continue\config.json
-if not exist "%USERPROFILE%\.continue" mkdir "%USERPROFILE%\.continue"
-if not exist "%CFG%" (
-    powershell -Command "@{ experimental = @{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = '%GEMINI_KEY%' } } } } } | ConvertTo-Json -Depth 10 | Set-Content '%CFG%' -Encoding UTF8"
-    echo + Config created
-) else echo + File exists.
-pause
-goto MENU
-
-:SETUP_COPILOT
-cls
-echo.
-echo --- GitHub Copilot ---
-set CFG=%USERPROFILE%\.github\copilot.json
-if not exist "%USERPROFILE%\.github" mkdir "%USERPROFILE%\.github"
-if not exist "%CFG%" (
-    powershell -Command "@{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = '%GEMINI_KEY%' } } } } | ConvertTo-Json -Depth 10 | Set-Content '%CFG%' -Encoding UTF8"
-    echo + Config created
-) else echo + File exists.
-pause
-goto MENU
-
-:SETUP_VSCODE
-cls
-echo.
-echo --- VS Code ---
-if not exist ".vscode" mkdir ".vscode"
-if not exist ".vscode\mcp.json" (
-    powershell -Command "@{ servers = @{ 'vision-skills' = @{ type = 'stdio'; command = 'npx'; args = @('vision-skills-mcp') } } } | ConvertTo-Json -Depth 10 | Set-Content '.vscode\mcp.json' -Encoding UTF8"
-    echo + VS Code MCP config created
-) else echo + File exists.
-pause
-goto MENU
-
-:SETUP_CLINE
-cls
-echo.
-echo --- Cline / Roo / Kilo Code ---
-if not exist ".cline" mkdir ".cline"
-if not exist ".cline\mcp.json" (
-    powershell -Command "@{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = '%GEMINI_KEY%' } } } } | ConvertTo-Json -Depth 10 | Set-Content '.cline\mcp.json' -Encoding UTF8"
-    echo + Cline MCP config created
-) else echo + File exists.
-pause
-goto MENU
-
-:SETUP_9ROUTER
-cls
-echo.
-echo --- 9Router ---
-echo.
-echo  npm install vision-skills
-echo  const v = new VisionSkills({ geminiApiKeys: ["%GEMINI_KEY:~0,12%..."] })
-echo  npx vision-skills serve
-echo.
-pause
-goto MENU
-
-:SETUP_ALL
-cls
-echo.
-echo --- Setup All ---
-set ODIR=%USERPROFILE%\.config\opencode\skills\vision-skills
-if not exist "%ODIR%" mkdir "%ODIR%"
-if exist ".\SKILL.md" copy /Y ".\SKILL.md" "%ODIR%\SKILL.md" >nul
-:: OpenCode
-powershell -ExecutionPolicy Bypass -File "%~dp0scripts\add-mcp-config.ps1" -ConfigPath "%USERPROFILE%\.config\opencode\opencode.json" -ApiKey "%GEMINI_KEY%" -ServerPath "%~dp0dist\mcp-server.js"
-:: Claude
-if not exist "%USERPROFILE%\.claude" mkdir "%USERPROFILE%\.claude"
-if not exist "%USERPROFILE%\.claude\claude.json" (
-    powershell -Command "@{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = '%GEMINI_KEY%' } } } } | ConvertTo-Json -Depth 10 | Set-Content '%USERPROFILE%\.claude\claude.json' -Encoding UTF8"
+:CODEX
+where codex >nul 2>nul || (
+  echo Error: Codex CLI is not installed; its TOML config was not modified.
+  pause
+  goto MENU
 )
-:: Cursor
-if not exist "%USERPROFILE%\.cursor" mkdir "%USERPROFILE%\.cursor"
-if not exist "%USERPROFILE%\.cursor\mcp.json" (
-    powershell -Command "@{ mcpServers = @{ 'vision-skills' = @{ command = 'npx'; args = @('vision-skills-mcp'); env = @{ GEMINI_API_KEYS = '%GEMINI_KEY%' } } } } | ConvertTo-Json -Depth 10 | Set-Content '%USERPROFILE%\.cursor\mcp.json' -Encoding UTF8"
+call codex mcp add vision-skills --env "GEMINI_API_KEYS=%GEMINI_KEY%" -- npx -y --package vision-skills vision-skills-mcp
+if errorlevel 1 (
+  echo Codex may already contain vision-skills. Check with: codex mcp list
+  pause
+  goto MENU
 )
-:: VS Code
-if not exist ".vscode" mkdir ".vscode"
-if not exist ".vscode\mcp.json" (
-    powershell -Command "@{ servers = @{ 'vision-skills' = @{ type = 'stdio'; command = 'npx'; args = @('vision-skills-mcp') } } } | ConvertTo-Json -Depth 10 | Set-Content '.vscode\mcp.json' -Encoding UTF8"
-)
-echo + Done! Restart tools.
+echo Configured vision-skills through Codex CLI.
 pause
 goto MENU
 
-:SETUP_ENV
-cls
-echo.
-echo --- Set Env ---
+:CURSOR
+set "TARGET_CONFIG=%USERPROFILE%\.cursor\mcp.json"
+set "TARGET_FORMAT=standard"
+goto RUN_MERGER
+
+:CONTINUE
+set "TARGET_CONFIG=%CD%\.continue\mcpServers\vision-skills.json"
+set "TARGET_FORMAT=continue"
+goto RUN_MERGER
+
+:VSCODE
+set "TARGET_CONFIG=%CD%\.vscode\mcp.json"
+set "TARGET_FORMAT=vscode"
+goto RUN_MERGER
+
+:CLINE
+set "TARGET_CONFIG=%USERPROFILE%\.cline\mcp.json"
+set "TARGET_FORMAT=standard"
+goto RUN_MERGER
+
+:ALL
+call :CONFIGURE_ONE "%USERPROFILE%\.config\opencode\opencode.json" opencode
+if errorlevel 1 goto FAILED
+set "SKILL_DIR=%USERPROFILE%\.config\opencode\skills\vision-skills"
+if not exist "%SKILL_DIR%" mkdir "%SKILL_DIR%" || goto FAILED
+copy /Y "%SCRIPT_DIR%SKILL.md" "%SKILL_DIR%\SKILL.md" >nul || goto FAILED
+call :CONFIGURE_ONE "%USERPROFILE%\.claude.json" standard
+if errorlevel 1 goto FAILED
+call :CONFIGURE_ONE "%USERPROFILE%\.cursor\mcp.json" standard
+if errorlevel 1 goto FAILED
+call :CONFIGURE_ONE "%CD%\.continue\mcpServers\vision-skills.json" continue
+if errorlevel 1 goto FAILED
+call :CONFIGURE_ONE "%CD%\.vscode\mcp.json" vscode
+if errorlevel 1 goto FAILED
+call :CONFIGURE_ONE "%USERPROFILE%\.cline\mcp.json" standard
+if errorlevel 1 goto FAILED
+echo Configured all JSON-based clients. Select Codex separately if installed.
+pause
+goto MENU
+
+:CONFIGURE_ONE
+set "VISION_SKILLS_SETUP_KEY=%GEMINI_KEY%"
+node "%MERGER%" "%~1" "%~2"
+set "MERGE_RESULT=%errorlevel%"
+set "VISION_SKILLS_SETUP_KEY="
+exit /b %MERGE_RESULT%
+
+:ENV
 setx GEMINI_API_KEYS "%GEMINI_KEY%" >nul
-echo + Saved to env. Open new terminal.
-echo + Test: vision-skills analyze ./image.jpg
+if errorlevel 1 goto FAILED
+echo Saved GEMINI_API_KEYS for the current Windows user. Open a new terminal.
 pause
 goto MENU
 
-:EOF
-exit /b 0
+:FAILED
+echo Setup failed. Existing configuration was not intentionally overwritten.
+pause
+goto MENU

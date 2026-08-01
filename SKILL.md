@@ -5,53 +5,47 @@ description: "Use when the user asks you to analyze, describe, read, or extract 
 
 # Vision Skills
 
-You have access to a vision analysis MCP server. When the user provides an image, find the server file and call it via bash using JSON-RPC over stdin/stdout.
+Use the registered `vision-skills` MCP tools directly when the user provides or refers to an image. Do not start another server or manually send JSON-RPC through the shell. If the tools are unavailable, state that the MCP integration is not connected, ask the user to run the platform setup script, and have them restart the client.
 
-## How to find the server
+## Tools
 
-The MCP server binary is registered in the OpenCode config. Read the config to find it:
-```
-Read opencode.json → find mcp.vision-skills.command
-→ Contains ["node", "/path/to/mcp-server.js"]
-→ Use that path
-```
+| Tool | Inputs | Result |
+| --- | --- | --- |
+| `analyze` | `image`, optional `auto` or fixed `mode`, optional `depth` | Bounded structured vision response |
+| `analyze_text` | `image`, optional `auto` or fixed `mode` | Bounded plain-text summary |
+| `health` | None | Provider readiness |
+| `clipboard` | None; Windows only | Official MCP PNG image content from the system clipboard |
 
-If not found, search for `mcp-server.js` in common locations or ask the user.
+`image` accepts a file path, HTTP(S) URL, base64 string, or image data URI. When the user asks about an image currently on the Windows clipboard, call `clipboard` and analyze the returned MCP image content directly. If the client cannot expose that content to the model, the client must mediate a subsequent analysis call; the tool does not return a data URI.
 
-## How to call
+## Mode Policy
 
-```
-1. Initialize:
-   echo '{"jsonrpc":"2.0","id":1,"method":"initialize"...}' | node /path/to/mcp-server.js
+MCP analysis accepts `auto` and fixed modes. Omitting `mode` inherits the configured SDK default, which is `auto` unless changed.
 
-2. Analyze:
-   echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"analyze","arguments":{"image":"path.jpg"}}}' | node /path/to/mcp-server.js
-```
+| Mode | Exact policy |
+| --- | --- |
+| `basic` | OCR only; no combined structured fields, semantic relationships, or reasoner |
+| `standard` | OCR + object + UI detection and combined tables/regions/layout/code fields; no semantic relationships or reasoner |
+| `advanced` | Standard plus semantic relationships; no reasoner |
+| `full` | Advanced plus reasoner |
 
-## Available tools
+Choose `basic` for quick text extraction, `standard` for normal screenshots/documents/photos, `advanced` when relationships matter, and `full` only when a reasoned interpretation is needed. Use `depth: deep` for dense or long images with small text; it creates additional tiled provider calls. Otherwise keep `fast`.
 
-| Tool | Description |
-|------|-------------|
-| `clipboard()` | Read image from system clipboard → returns base64 |
-| `analyze(image, mode?, depth?)` | Analyze image → full structured JSON |
-| `analyze_text(image, mode?)` | Analyze image → plain-text summary |
-| `health()` | Check if API is configured |
+Operator-configured specialist routes obey the selected policy: `basic` runs only OCR routes, while `standard`, `advanced`, and `full` may run OCR, object, UI, table, region, layout, and code routes.
 
-### analyze() output includes
+## Reading Results
 
-- Text blocks (with position, color, emphasis)
-- Object labels (with bounding boxes)
-- Tables (structured rows/columns)
-- Code context (language, functions, errors)
-- Scene graph (spatial relationships)
-- UI hierarchy (containment tree)
-- Semantic relationships (advanced+)
-- Reasoning (advanced+)
+- Final bounding boxes are pixel objects: `{ x1, y1, x2, y2 }`.
+- `entity.confidence: null` means a specialist did not report confidence; do not invent a score.
+- Top-level `confidence` is an aggregate routing/provider signal, not calibrated end-to-end accuracy.
+- Use `provenance` to identify the requested mode, selection reason, provider names, and cache hits.
+- `route` and `usage` describe explicit specialist routes and HTTP calls only; absence means no specialist route was configured.
+- Treat `errors`, `warnings`, `reasonerOutput.openQuestions`, and output `truncation` as material caveats.
 
-### Parameters
+MCP output is wrapped with `truncation` metadata. Read untruncated structured data from `data`. If `truncation.truncated` is true, `json` contains a bounded partial serialization and must not be presented as complete analysis.
 
-| Param | Values | Default | Description |
-|-------|--------|---------|-------------|
-| `image` | file path, URL, base64, `clipboard://` | required | The image to analyze |
-| `mode` | `basic`, `standard`, `advanced`, `full` | `standard` | Trade detail for cost |
-| `depth` | `fast`, `deep` | `fast` | `deep` tiles large images for thorough reading |
+Cancellation and progress are protocol features: let the client cancel long calls, and expect progress only when it supplied a progress token.
+
+## URL Safety
+
+Image URL checks block redirects, explicit ports, credentials, and non-public resolved addresses, but DNS is not pinned to the connection. For untrusted URLs, acknowledge the DNS rebinding/time-of-check caveat rather than describing URL fetching as a complete SSRF sandbox.

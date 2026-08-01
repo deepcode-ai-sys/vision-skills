@@ -8,6 +8,7 @@
 import type { VLMClient } from '../../scene-graph/semantic.js';
 import { callGemini } from '../gemini/client.js';
 import { GeminiKeyPool } from '../gemini/key-pool.js';
+import type { RequestContext } from '../../core/types.js';
 
 export class GeminiVLMClient implements VLMClient {
   private keyPool: GeminiKeyPool;
@@ -26,7 +27,12 @@ export class GeminiVLMClient implements VLMClient {
     return this.keyPool.hasKeys;
   }
 
-  async askJson(image: Buffer, prompt: string, _maxTokens = 1024): Promise<string> {
+  async askJson(
+    image: Buffer,
+    prompt: string,
+    _maxTokens = 1024,
+    context?: RequestContext,
+  ): Promise<string> {
     return callGemini({
       keyPool: this.keyPool,
       model: this.model,
@@ -34,6 +40,7 @@ export class GeminiVLMClient implements VLMClient {
       imageBase64: image.toString('base64'),
       timeoutMs: 45000,
       jsonOutput: true,
+      context,
     });
   }
 

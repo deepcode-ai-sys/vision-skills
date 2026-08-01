@@ -1,0 +1,11 @@
+{
+  "som_image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
+  "parsed_content_list": [
+    {
+      "type": "button",
+      "content": "OK",
+      "bbox": [0.1, 0.2, 0.5, 0.6],
+      "interactivity": true
+    }
+  ]
+}

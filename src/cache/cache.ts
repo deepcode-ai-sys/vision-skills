@@ -6,6 +6,8 @@
  * responses keyed by image hash + mode + options.
  */
 
+import { createHash } from 'node:crypto';
+
 export interface CacheBackend {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ttlSeconds: number): Promise<void>;
@@ -53,8 +55,22 @@ export class CacheManager {
   ) {}
 
   static makeKey(imageHash: string, mode: string, options: Record<string, unknown> = {}): string {
-    const opts = JSON.stringify(options, Object.keys(options).sort());
+    const canonicalize = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(canonicalize);
+      if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, nested]) => [key, canonicalize(nested)]));
+      }
+      return value;
+    };
+    const opts = JSON.stringify(canonicalize(options));
     return `vision:${mode}:${imageHash}:${opts}`;
+  }
+
+  static identity(value: unknown): string {
+    const key = CacheManager.makeKey('', '', { value });
+    return createHash('sha256').update(key).digest('hex');
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -68,6 +84,9 @@ export class CacheManager {
     try {
       return JSON.parse(raw) as T;
     } catch {
+      this.hits -= 1;
+      this.misses += 1;
+      await this.backend.delete(key);
       return null;
     }
   }

@@ -1,0 +1,10 @@
+{
+  "protocol": "canonical-v1",
+  "text": [{ "text": "Login", "bbox": [8, 6, 34, 16], "confidence": null }],
+  "objects": [{ "label": "panel", "bbox": [4, 3, 60, 44], "confidence": 0.9 }],
+  "ui": [{ "label": "button", "text": "Submit", "bbox": [12, 28, 48, 40], "confidence": null, "clickable": true }],
+  "tables": [],
+  "regions": [],
+  "layout": null,
+  "code": null
+}

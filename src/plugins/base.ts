@@ -65,11 +65,18 @@ export abstract class BasePlugin implements VisionPlugin {
     };
 
     try {
+      context.signal?.throwIfAborted();
       const data = await this.run(image, context);
+      context.signal?.throwIfAborted();
       result.data = data;
-      result.confidence = typeof data.confidence === 'number' ? data.confidence : 1.0;
+      if (Array.isArray(data.warnings)) {
+        result.warnings.push(...data.warnings.filter((warning): warning is string => typeof warning === 'string'));
+      }
+      const confidence = typeof data.confidence === 'number' ? data.confidence : 1.0;
+      result.confidence = Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0;
       result.costActual = this.costEstimate;
     } catch (err) {
+      if (context.signal?.aborted) throw err;
       const e = err as Error;
       result.errors.push(`${e.name}: ${e.message}`);
     } finally {

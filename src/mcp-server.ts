@@ -1,258 +1,173 @@
-/**
- * MCP server for Vision Skills.
- *
- * Exposes vision analysis as MCP tools, so AI assistants (OpenCode, Claude
- * Code, Cursor, etc.) can "see" images without native vision support.
- *
- * Tools:
- *   - analyze(image, mode?, depth?) -> structured JSON
- *   - analyze_text(image, mode?) -> plain-text description (for LLM)
- *   - health() -> provider status
- *
- * Usage:
- *   1. npx vision-skills-mcp
- *   2. Configure in OpenCode's mcp section (see README)
- */
+#!/usr/bin/env node
 
-import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
-import { VisionSkills } from './index.js';
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
 
-async function main() {
-  // Read all image bytes from stdin until the parent sends the tool call.
-  // Simple stdio-based MCP server using raw JSON-RPC.
-  const encoder = new TextEncoder();
-  const write = (msg: unknown) => {
-    const line = JSON.stringify(msg) + '\n';
-    process.stdout.write(encoder.encode(line));
-  };
+import { VisionSkills, type AnalyzeOptions } from './vision-skills.js';
+import type { VisionSkillsConfig } from './config.js';
+import { REQUESTED_MODES, type RequestedMode } from './core/types.js';
+import { boundOutput, boundedLegacyText } from './utils/output.js';
 
-  // Minimal MCP server loop (JSON-RPC over stdio).
-  let buffer = '';
-  for await (const chunk of process.stdin) {
-    buffer += chunk.toString();
-    for (;;) {
-      const nl = buffer.indexOf('\n');
-      if (nl === -1) break;
-      const line = buffer.slice(0, nl);
-      buffer = buffer.slice(nl + 1);
+const DEFAULT_MAX_OUTPUT_CHARS = 200_000;
+const DEFAULT_MAX_CLIPBOARD_BYTES = 10 * 1024 * 1024;
+const imageSchema = z.string().min(1).max(15_000_000).describe('Image path, URL, base64, or image data URI');
+const modeSchema = z.enum(REQUESTED_MODES).optional();
 
-      if (!line.trim()) continue;
+type VisionService = Pick<VisionSkills, 'analyze' | 'healthCheck'>;
 
-      let msg: Record<string, unknown>;
-      try {
-        msg = JSON.parse(line);
-      } catch {
-        continue; // skip malformed lines
-      }
-
-      const method = msg.method as string;
-
-      // Tool definitions, shared by tools/list.
-      const TOOLS = [
-        {
-          name: 'clipboard',
-          description:
-            'Read an image from the system clipboard and return its base64 data. Call this first when the user mentions an image but has not provided a file path.',
-          inputSchema: { type: 'object', properties: {} },
-        },
-        {
-          name: 'analyze',
-          description: 'Analyze an image and return structured JSON',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              image: { type: 'string', description: 'Image path, URL, or base64 data URI' },
-              mode: { type: 'string', enum: ['basic', 'standard', 'advanced', 'full'], default: 'standard' },
-              depth: { type: 'string', enum: ['fast', 'deep'], default: 'fast' },
-            },
-            required: ['image'],
-          },
-        },
-        {
-          name: 'analyze_text',
-          description: 'Analyze an image and return a plain-text summary (good for feeding to text-only LLMs)',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              image: { type: 'string', description: 'Image path, URL, or base64 data URI' },
-              mode: { type: 'string', enum: ['basic', 'standard', 'advanced', 'full'], default: 'standard' },
-            },
-            required: ['image'],
-          },
-        },
-        {
-          name: 'health',
-          description: 'Check provider health',
-          inputSchema: { type: 'object', properties: {} },
-        },
-      ];
-
-      if (method === 'initialize') {
-        // Per MCP spec: declare the tools capability as a feature flag here;
-        // the actual tool list is served by tools/list.
-        write({
-          jsonrpc: '2.0',
-          id: msg.id,
-          result: {
-            protocolVersion: '2024-11-05',
-            capabilities: { tools: { listChanged: false } },
-            serverInfo: { name: 'vision-skills-mcp', version: '0.1.0' },
-          },
-        });
-        continue;
-      }
-
-      if (method === 'tools/list') {
-        write({ jsonrpc: '2.0', id: msg.id, result: { tools: TOOLS } });
-        continue;
-      }
-
-      if (method === 'notifications/initialized') {
-        continue;
-      }
-
-      if (method === 'tools/call') {
-        const params = msg.params as Record<string, unknown> | undefined;
-        const name = params?.name as string;
-        const args = (params?.arguments ?? {}) as Record<string, unknown>;
-
-        try {
-          // All Gemini keys from env (single or comma-separated), for rotation.
-          const allKeys = [
-            ...(process.env.GEMINI_API_KEY ?? '').split(',').map((k) => k.trim()),
-            ...(process.env.GEMINI_API_KEYS ?? '').split(',').map((k) => k.trim()),
-          ].filter(Boolean);
-
-          let result: string;
-
-          if (name === 'health') {
-            const vision = new VisionSkills({ geminiApiKeys: allKeys });
-            const health = await vision.healthCheck();
-            result = JSON.stringify(health, null, 2);
-          } else if (name === 'clipboard') {
-            // Read image from system clipboard (Windows)
-            const isWin = process.platform === 'win32';
-            let b64 = '';
-            if (isWin) {
-              // Use -EncodedCommand (base64 UTF-16LE) to avoid all quoting/escaping issues
-              const psScript = `
-Add-Type -AssemblyName System.Windows.Forms
-$img = [System.Windows.Forms.Clipboard]::GetImage()
-if ($img -ne $null) {
-  $ms = New-Object System.IO.MemoryStream
-  $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-  $b64 = [System.Convert]::ToBase64String($ms.ToArray())
-  Write-Output "DATA:$b64"
-} else {
-  Write-Output "ERROR:No image in clipboard"
-}`;
-              const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
-              const output = execSync(
-                `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
-                { timeout: 10000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
-              ).trim();
-
-              if (output.startsWith('DATA:')) {
-                b64 = output.slice(5).trim();
-              } else {
-                throw new Error(output.replace('ERROR:', ''));
-              }
-            } else {
-              // macOS: use osascript or sips
-              try {
-                const out = execSync(
-                  `osascript -e 'try' -e 'set theImage to the clipboard as «class PNGf»' -e 'set thePath to (path to temporary folder as text) & "vskill_clipboard.png"' -e 'set fileRef to open for access file thePath with write permission' -e 'write theImage to fileRef' -e 'close access fileRef' -e 'end try' 2>/dev/null; base64 < /tmp/vskill_clipboard.png 2>/dev/null || echo "ERROR:No image"`,
-                  { timeout: 10000, encoding: 'utf8' },
-                ).trim();
-                if (out && !out.startsWith('ERROR')) b64 = out;
-                else throw new Error('No image found in clipboard');
-              } catch {
-                throw new Error('Clipboard not supported on this platform. Save the image to a file and use analyze() instead.');
-              }
-            }
-
-            result = JSON.stringify({ base64: `data:image/png;base64,${b64}`, format: 'png' }, null, 2);
-          } else if (name === 'analyze' || name === 'analyze_text') {
-            const imageArg = args.image as string;
-            if (!imageArg) throw new Error('Missing required "image" argument');
-
-            // Accept: URL, data URI, file path, or raw base64
-            let imageInput: string | Buffer;
-            if (imageArg.startsWith('http://') || imageArg.startsWith('https://') || imageArg.startsWith('data:')) {
-              imageInput = imageArg;
-            } else {
-              // Check if it's a file that exists; otherwise treat as raw base64
-              try {
-                imageInput = readFileSync(imageArg);
-              } catch {
-                // Not a valid file path — assume raw base64
-                imageInput = Buffer.from(imageArg, 'base64');
-              }
-            }
-
-            const mode = (args.mode as string) ?? 'standard';
-            const depth = (args.depth as string) ?? 'fast';
-
-            // Pass ALL keys so rotation works, plus the requested depth.
-            const v = new VisionSkills({
-              geminiApiKeys: allKeys,
-              analysisDepth: depth as 'fast' | 'deep',
-            });
-
-            const res = await v.analyze(imageInput, { mode: mode as never });
-
-            if (name === 'analyze_text') {
-              // Convert JSON to plain text for text-only LLMs
-              const texts = res.entities
-                .filter((e) => e.text)
-                .map((e) => e.text)
-                .join(' | ');
-              const objects = [...new Set(res.entities.map((e) => e.label))].join(', ');
-              result = [
-                `Image type: ${res.imageType}`,
-                texts ? `Text: ${texts}` : null,
-                objects ? `Objects: ${objects}` : null,
-                res.reasonerOutput ? `Summary: ${res.reasonerOutput.summary}` : null,
-              ]
-                .filter(Boolean)
-                .join('\n');
-            } else {
-              result = JSON.stringify(res, null, 2);
-            }
-          } else {
-            throw new Error(`Unknown tool: ${name}`);
-          }
-
-          write({
-            jsonrpc: '2.0',
-            id: msg.id,
-            result: {
-              content: [{ type: 'text', text: result }],
-            },
-          });
-        } catch (err) {
-          write({
-            jsonrpc: '2.0',
-            id: msg.id,
-            error: {
-              code: -1,
-              message: (err as Error).message || String(err),
-            },
-          });
-        }
-        continue;
-      }
-
-      if (method === 'shutdown') {
-        write({ jsonrpc: '2.0', id: msg.id, result: null });
-        process.exit(0);
-      }
-    }
-  }
+export interface McpServerOptions {
+  vision?: VisionService;
+  config?: VisionSkillsConfig;
+  maxOutputChars?: number;
+  maxClipboardBytes?: number;
+  readClipboardImage?: () => Buffer;
 }
 
-main().catch((err) => {
-  console.error('MCP server error:', err);
-  process.exit(1);
-});
+function normalizeImage(image: string): string {
+  if (/^(?:https?:\/\/|data:image\/)/.test(image)) return image;
+  if (existsSync(image)) return image;
+  if (/^[A-Za-z0-9+/]+={0,2}$/.test(image) && image.length % 4 === 0) {
+    return `data:image/png;base64,${image}`;
+  }
+  return image;
+}
+
+function textSummary(result: Awaited<ReturnType<VisionService['analyze']>>): string {
+  const texts = result.entities.filter((entity) => entity.text).map((entity) => entity.text).join(' | ');
+  const objects = [...new Set(result.entities.map((entity) => entity.label))].join(', ');
+  return [
+    `Image type: ${result.imageType}`,
+    texts ? `Text: ${texts}` : null,
+    objects ? `Objects: ${objects}` : null,
+    result.reasonerOutput ? `Summary: ${result.reasonerOutput.summary}` : null,
+  ].filter((line): line is string => Boolean(line)).join('\n');
+}
+
+function toolError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    isError: true as const,
+    structuredContent: { error: { message } },
+    content: [{ type: 'text' as const, text: message }],
+  };
+}
+
+export function createMcpServer(options: McpServerOptions = {}): McpServer {
+  const vision = options.vision ?? new VisionSkills(options.config);
+  const maxOutputChars = options.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
+  const maxClipboardBytes = options.maxClipboardBytes ?? DEFAULT_MAX_CLIPBOARD_BYTES;
+  if (!Number.isSafeInteger(maxOutputChars) || maxOutputChars < 0) throw new RangeError('maxOutputChars must be a non-negative safe integer');
+  if (!Number.isSafeInteger(maxClipboardBytes) || maxClipboardBytes < 1) throw new RangeError('maxClipboardBytes must be a positive safe integer');
+  const server = new McpServer({ name: 'vision-skills-mcp', version: '0.1.0' });
+
+  const analyze = async (
+    args: { image: string; mode?: RequestedMode; depth?: 'fast' | 'deep' },
+    extra: { signal: AbortSignal; _meta?: { progressToken?: string | number }; sendNotification: (notification: never) => Promise<void> },
+    plainText: boolean,
+  ) => {
+    try {
+      const reportProgress: AnalyzeOptions['reportProgress'] = async (progress, message) => {
+        const progressToken = extra._meta?.progressToken;
+        if (progressToken === undefined) return;
+        await extra.sendNotification({
+          method: 'notifications/progress',
+          params: { progressToken, progress, total: 100, message },
+        } as never);
+      };
+      await reportProgress(1, 'Starting analysis');
+      const result = await vision.analyze(normalizeImage(args.image), {
+        mode: args.mode,
+        analysisDepth: args.depth,
+        signal: extra.signal,
+        reportProgress,
+      });
+      await reportProgress(100, 'Analysis complete');
+      const output = boundOutput(plainText ? textSummary(result) : result, maxOutputChars);
+      return {
+        structuredContent: output as unknown as Record<string, unknown>,
+        content: [{ type: 'text' as const, text: plainText && output.data !== undefined
+          ? String(output.data)
+          : boundedLegacyText(output) }],
+      };
+    } catch (error) {
+      return toolError(error);
+    }
+  };
+
+  server.registerTool('analyze', {
+    description: 'Analyze an image and return bounded structured output',
+    inputSchema: z.object({
+      image: imageSchema,
+      mode: modeSchema,
+      depth: z.enum(['fast', 'deep']).default('fast'),
+    }).strict(),
+  }, (args, extra) => analyze(args, extra, false));
+
+  server.registerTool('analyze_text', {
+    description: 'Analyze an image and return a bounded plain-text summary',
+    inputSchema: z.object({ image: imageSchema, mode: modeSchema }).strict(),
+  }, (args, extra) => analyze(args, extra, true));
+
+  server.registerTool('health', {
+    description: 'Check provider readiness',
+    inputSchema: z.object({}).strict(),
+  }, async () => {
+    try {
+      const providers = await vision.healthCheck();
+      const output = boundOutput({ ready: Object.values(providers).some(Boolean), providers }, maxOutputChars);
+      return { structuredContent: output as unknown as Record<string, unknown>, content: [{ type: 'text', text: boundedLegacyText(output) }] };
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
+  server.registerTool('clipboard', {
+    description: 'Read a PNG image from the Windows system clipboard',
+    inputSchema: z.object({}).strict(),
+  }, async () => {
+    try {
+      let image: Buffer;
+      if (options.readClipboardImage) image = options.readClipboardImage();
+      else {
+        if (process.platform !== 'win32') throw new Error('Clipboard tool is supported on Windows only');
+        const script = `Add-Type -AssemblyName System.Windows.Forms;$i=[System.Windows.Forms.Clipboard]::GetImage();if($null -eq $i){throw "No image in clipboard"};$m=New-Object IO.MemoryStream;$i.Save($m,[Drawing.Imaging.ImageFormat]::Png);$b=$m.ToArray();if($b.Length -gt ${maxClipboardBytes}){throw "Clipboard image is $($b.Length) bytes; maximum is ${maxClipboardBytes} bytes"};[Console]::OpenStandardOutput().Write($b,0,$b.Length)`;
+        image = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], {
+          timeout: 10_000, maxBuffer: maxClipboardBytes + 1,
+        });
+      }
+      if (image.length > maxClipboardBytes) {
+        throw new Error(`Clipboard image is ${image.length} bytes; maximum is ${maxClipboardBytes} bytes`);
+      }
+      return {
+        structuredContent: { format: 'png', bytes: image.length },
+        content: [{ type: 'image' as const, data: image.toString('base64'), mimeType: 'image/png' }],
+      };
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
+  return server;
+}
+
+export async function runMcpServer(): Promise<void> {
+  const server = createMcpServer();
+  const shutdown = async () => {
+    await server.close();
+    process.exitCode = 0;
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+  await server.connect(new StdioServerTransport());
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  runMcpServer().catch((error) => {
+    console.error('MCP server error:', error);
+    process.exitCode = 1;
+  });
+}

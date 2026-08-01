@@ -1,0 +1,15 @@
+{
+  "schema_name": "DoclingDocument",
+  "version": "1.0.0",
+  "texts": [{
+    "self_ref": "#/texts/0",
+    "label": "paragraph",
+    "text": "Invoice",
+    "prov": [{ "page_no": 0, "bbox": { "l": 10, "t": 30, "r": 50, "b": 20, "coord_origin": "BOTTOMLEFT" } }]
+  }],
+  "tables": [{
+    "label": "table",
+    "data": { "grid": [[{ "text": "Item" }, { "text": "Price" }], [{ "text": "Tea" }, { "text": "2" }]] },
+    "prov": [{ "page_no": 0, "bbox": { "l": 5, "t": 80, "r": 90, "b": 40, "coord_origin": "BOTTOMLEFT" } }]
+  }]
+}

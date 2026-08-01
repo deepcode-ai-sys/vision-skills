@@ -1,227 +1,126 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-VERSION="1.0"
+VERSION="1.1"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+MERGER="$SCRIPT_DIR/scripts/add-json-mcp.mjs"
 
-echo "============================================"
-echo " Vision Skills v${VERSION} - Setup Integrations"
-echo " Give text-only AI the ability to see images"
-echo "============================================"
-echo ""
+echo "Vision Skills v${VERSION} integration setup"
 
-# ---- Prerequisites ----
-if ! command -v npx &>/dev/null; then
-  echo "[!] Node.js npx not found. Install from https://nodejs.org"
+for command_name in node npx; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    echo "Error: $command_name is required. Install Node.js from https://nodejs.org" >&2
+    exit 1
+  fi
+done
+
+if [[ ! -f "$MERGER" ]]; then
+  echo "Error: missing setup helper: $MERGER" >&2
   exit 1
 fi
 
-# ---- Get API key ----
 while true; do
-  echo "You need a Gemini API key (free, no credit card required)"
-  echo "Get one at: https://aistudio.google.com/apikey"
-  echo ""
-  read -rp "Enter your Gemini API key: " GEMINI_KEY
-  echo ""
-
-  if [[ -z "$GEMINI_KEY" ]]; then
-    echo "[!] Please enter a valid key."
-    echo ""
-    continue
-  fi
-
-  if [[ "$GEMINI_KEY" != AIza* ]]; then
-    echo "[!] Invalid key format. Gemini keys typically start with AIza..."
-    echo ""
-    continue
-  fi
-
-  break
+  read -rsp "Gemini API key: " GEMINI_KEY
+  echo
+  [[ "$GEMINI_KEY" == AIza* ]] && break
+  echo "Invalid key format. Gemini API keys normally start with AIza."
 done
 
-# ---- Install global ----
-echo ""
-echo "Installing vision-skills global..."
-npm install -g vision-skills 2>&1 | grep -v "npm WARN" || true
-echo "+ Da cai dat."
-
-# ---- Helper ----
-make_json() {
-  mkdir -p "$(dirname "$1")"
-  echo "$2" > "$1"
-  echo "+ Created $1"
+configure_json() {
+  VISION_SKILLS_SETUP_KEY="$GEMINI_KEY" node "$MERGER" "$1" "$2"
 }
 
-menu() {
-  echo ""
-  echo "============================================"
-  echo " Vision Skills v${VERSION}"
-  echo " Key: ${GEMINI_KEY:0:12}... (da luu)"
-  echo "============================================"
-  echo ""
-  echo "Select platform to integrate:"
-  echo ""
-  echo " 1) OpenCode"
-  echo " 2) Claude Code CLI"
-  echo " 3) OpenAI Codex CLI"
-  echo " 4) Cursor"
-  echo " 5) Continue (Continue.dev)"
-  echo " 6) GitHub Copilot"
-  echo " 7) VS Code"
-  echo " 8) Cline / Roo / Kilo Code"
-  echo " 9) 9Router"
-  echo ""
-  echo " A) All"
-  echo " B) CLI only + set env"
-  echo ""
-  echo " 0) Exit"
-  echo ""
-  read -rp "Chon (0-9, A, B): " choice
+install_skill() {
+  local skill_dir="$HOME/.config/opencode/skills/vision-skills"
+  mkdir -p "$skill_dir"
+  cp "$SCRIPT_DIR/SKILL.md" "$skill_dir/SKILL.md"
+  echo "Installed OpenCode skill in $skill_dir"
+}
 
+setup_opencode() {
+  install_skill
+  configure_json "$HOME/.config/opencode/opencode.json" opencode
+}
+
+setup_claude() {
+  configure_json "$HOME/.claude.json" standard
+}
+
+setup_codex() {
+  if ! command -v codex >/dev/null 2>&1; then
+    echo "Error: Codex CLI is not installed; cannot safely edit its TOML config." >&2
+    return 1
+  fi
+  if codex mcp add vision-skills --env "GEMINI_API_KEYS=$GEMINI_KEY" -- npx -y --package vision-skills vision-skills-mcp; then
+    echo "Configured vision-skills through Codex CLI."
+  else
+    echo "Codex may already contain vision-skills. Check with: codex mcp list" >&2
+    return 1
+  fi
+}
+
+setup_cursor() {
+  configure_json "$HOME/.cursor/mcp.json" standard
+}
+
+setup_continue() {
+  configure_json "$PWD/.continue/mcpServers/vision-skills.json" continue
+}
+
+setup_vscode() {
+  configure_json "$PWD/.vscode/mcp.json" vscode
+}
+
+setup_cline() {
+  configure_json "$HOME/.cline/mcp.json" standard
+}
+
+setup_env() {
+  local env_file="$HOME/.vision-skills.env"
+  printf 'export GEMINI_API_KEYS=%q\n' "$GEMINI_KEY" > "$env_file"
+  chmod 600 "$env_file"
+  echo "Saved $env_file. Load it with: source \"$env_file\""
+}
+
+setup_all() {
+  setup_opencode
+  setup_claude
+  setup_cursor
+  setup_continue
+  setup_vscode
+  setup_cline
+  if command -v codex >/dev/null 2>&1; then
+    setup_codex || true
+  fi
+}
+
+while true; do
+  cat <<'MENU'
+
+1) OpenCode
+2) Claude Code
+3) OpenAI Codex CLI
+4) Cursor
+5) Continue
+6) VS Code / GitHub Copilot
+7) Cline
+A) Configure all supported clients
+B) Save key to a private env file
+0) Exit
+MENU
+  read -rp "Select: " choice
   case "$choice" in
-    0) exit 0 ;;
     1) setup_opencode ;;
     2) setup_claude ;;
     3) setup_codex ;;
     4) setup_cursor ;;
     5) setup_continue ;;
-    6) setup_copilot ;;
-    7) setup_vscode ;;
-    8) setup_cline ;;
-    9) setup_9router ;;
+    6) setup_vscode ;;
+    7) setup_cline ;;
     A|a) setup_all ;;
     B|b) setup_env ;;
-    *) menu ;;
+    0) exit 0 ;;
+    *) echo "Invalid selection." ;;
   esac
-  menu
-}
-
-setup_opencode() {
-  echo ""
-  echo "--- OpenCode ---"
-  ODIR="$HOME/.config/opencode/skills/vision-skills"
-  mkdir -p "$ODIR"
-  [ -f "./SKILL.md" ] && cp ./SKILL.md "$ODIR/SKILL.md" 2>/dev/null && echo "+ SKILL.md copied"
-  CFG="$HOME/.config/opencode/opencode.json"
-  [ ! -f "$CFG" ] && make_json "$CFG" "{ \"mcp\": { \"vision-skills\": { \"type\": \"local\", \"command\": [\"npx\", \"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"${GEMINI_KEY}\" } } } }" || echo "+ File exists, add MCP manually"
-  echo "+ Done!"
-  read -rp "Press Enter..."
-}
-
-setup_claude() {
-  echo ""
-  echo "--- Claude Code CLI ---"
-  CFG="$HOME/.claude/claude.json"
-  [ ! -f "$CFG" ] && make_json "$CFG" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"${GEMINI_KEY}\" } } } }" || echo "+ File exists."
-  echo "+ Done!"
-  read -rp "Press Enter..."
-}
-
-setup_codex() {
-  echo ""
-  echo "--- OpenAI Codex CLI ---"
-  CFG="$HOME/.codex/config.json"
-  [ ! -f "$CFG" ] && make_json "$CFG" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"${GEMINI_KEY}\" } } } }" || echo "+ File exists."
-  echo "+ Done!"
-  read -rp "Press Enter..."
-}
-
-setup_cursor() {
-  echo ""
-  echo "--- Cursor ---"
-  CFG="$HOME/.cursor/mcp.json"
-  [ ! -f "$CFG" ] && make_json "$CFG" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"${GEMINI_KEY}\" } } } }" || echo "+ File exists."
-  echo "+ Done!"
-  read -rp "Press Enter..."
-}
-
-setup_continue() {
-  echo ""
-  echo "--- Continue (Continue.dev) ---"
-  CFG="$HOME/.continue/config.json"
-  [ ! -f "$CFG" ] && make_json "$CFG" "{ \"experimental\": { \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"${GEMINI_KEY}\" } } } } }" || echo "+ File exists."
-  echo "+ Done!"
-  read -rp "Press Enter..."
-}
-
-setup_copilot() {
-  echo ""
-  echo "--- GitHub Copilot ---"
-  CFG="$HOME/.github/copilot.json"
-  [ ! -f "$CFG" ] && make_json "$CFG" "{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"${GEMINI_KEY}\" } } } }" || echo "+ File exists."
-  echo "+ Done!"
-  read -rp "Press Enter..."
-}
-
-setup_vscode() {
-  echo ""
-  echo "--- VS Code ---"
-  echo " VS Code ho tro MCP. Them vao .vscode/mcp.json:"
-  echo ""
-  echo ' { "servers": { "vision-skills": {'
-  echo '   "type": "stdio",'
-  echo '   "command": "npx",'
-  echo '   "args": ["vision-skills-mcp"] } } }'
-  echo ""
-  echo " (VS Code doc GEMINI_API_KEYS tu env)"
-  read -rp "Press Enter..."
-}
-
-setup_cline() {
-  echo ""
-  echo "--- Cline / Roo / Kilo Code ---"
-  echo " Them vao .cline/mcp.json (hoac .roo, .kilocode):"
-  echo ""
-  echo ' { "mcpServers": { "vision-skills": {'
-  echo '   "command": "npx",'
-  echo '   "args": ["vision-skills-mcp"] } } }'
-  echo ""
-  echo " (Doc key tu GEMINI_API_KEYS env)"
-  read -rp "Press Enter..."
-}
-
-setup_9router() {
-  echo ""
-  echo "--- 9Router ---"
-  echo " Node.js: npm install vision-skills"
-  echo "   const v = new VisionSkills({ geminiApiKeys: [\"${GEMINI_KEY:0:12}...\"] })"
-  echo ""
-  echo " REST: npx vision-skills serve"
-  echo "   POST http://localhost:8000/v1/analyze"
-  read -rp "Press Enter..."
-}
-
-setup_all() {
-  echo ""
-  echo "--- Setup All ---"
-  ODIR="$HOME/.config/opencode/skills/vision-skills"
-  mkdir -p "$ODIR"
-  [ -f "./SKILL.md" ] && cp ./SKILL.md "$ODIR/SKILL.md" 2>/dev/null
-  for f in \
-    "$HOME/.config/opencode/opencode.json:{ \"mcp\": { \"vision-skills\": { \"type\": \"local\", \"command\": [\"npx\", \"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"${GEMINI_KEY}\" } } } }" \
-    "$HOME/.claude/claude.json:{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"${GEMINI_KEY}\" } } } }" \
-    "$HOME/.cursor/mcp.json:{ \"mcpServers\": { \"vision-skills\": { \"command\": \"npx\", \"args\": [\"vision-skills-mcp\"], \"env\": { \"GEMINI_API_KEYS\": \"${GEMINI_KEY}\" } } } }"; do
-    path="${f%%:*}"
-    content="${f#*:}"
-    [ ! -f "$path" ] && make_json "$path" "$content"
-  done
-  echo ""
-  echo "+ Configured OpenCode + Claude Code + Cursor!"
-  echo "+ Your key has been auto-filled."
-  echo "+ Restart tool de to apply changes."
-  read -rp "Press Enter..."
-}
-
-setup_env() {
-  echo ""
-  echo "--- Set env ---"
-  echo "export GEMINI_API_KEYS='${GEMINI_KEY}'" >> "$HOME/.bashrc"
-  echo "export GEMINI_API_KEYS='${GEMINI_KEY}'" >> "$HOME/.zshrc" 2>/dev/null || true
-  echo "export GEMINI_API_KEYS='${GEMINI_KEY}'" >> "$HOME/.profile"
-  echo "+ Added to .bashrc / .zshrc / .profile"
-  echo "+ Open a NEW terminal hoac: source ~/.bashrc"
-  echo ""
-  echo " Test it: vision-skills analyze ./anh.jpg"
-  read -rp "Press Enter..."
-}
-
-menu
+  echo "Restart the configured client to load the MCP server."
+done

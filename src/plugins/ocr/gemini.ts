@@ -48,13 +48,14 @@ export class GeminiOCRPlugin extends BasePlugin {
       image,
       context,
       this.perAttemptTimeoutMs,
-      { depth: this.depth },
+      { depth: context.analysisDepth ?? this.depth },
     );
     const fullText = combined.textBlocks.map((b) => b.text).join('\n');
     return {
       confidence: combined.textBlocks.length > 0 ? 0.9 : 0,
       text_blocks: combined.textBlocks,
       full_text: fullText,
+      warnings: combined.warnings,
     };
   }
 

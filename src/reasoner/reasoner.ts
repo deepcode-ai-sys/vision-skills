@@ -20,6 +20,8 @@
  * visible content.
  */
 
+import { z } from 'zod';
+
 import type {
   ActionHint,
   Entity,
@@ -29,6 +31,7 @@ import type {
   Table,
   ThinkingStep,
   CodeInfo,
+  RequestContext,
 } from '../core/types.js';
 import type { VLMClient } from '../scene-graph/semantic.js';
 
@@ -39,13 +42,30 @@ export interface ReasonInput {
   imageType: ImageType;
   tables?: Table[];
   code?: CodeInfo | null;
+  context?: RequestContext;
 }
+
+const reasonerSchema = z.object({
+  summary: z.string(),
+  ui_state_interpretation: z.string().nullable().optional(),
+  action_hints: z.array(z.object({
+    action: z.string(), target: z.string(), reason: z.string(),
+  })).optional().default([]),
+  anomalies: z.array(z.string()).optional().default([]),
+  reasoning_confidence: z.number().finite().optional().default(0.5),
+  thinking_trace: z.array(z.object({
+    phase: z.enum(['observe', 'ground', 'hypothesize', 'verify', 'self_review', 'deliver']),
+    content: z.string().min(1),
+  })).optional().default([]),
+  open_questions: z.array(z.string()).optional().default([]),
+}).passthrough();
 
 export class Reasoner {
   constructor(private vlm: VLMClient | null) {}
 
   async reason(input: ReasonInput): Promise<ReasonerOutput | null> {
     if (!this.vlm) return null;
+    input.context?.signal?.throwIfAborted();
 
     const prompt = this.buildPrompt(
       input.entities,
@@ -56,8 +76,9 @@ export class Reasoner {
     );
     let raw: string;
     try {
-      raw = await this.vlm.askJson(input.image, prompt, 2048);
-    } catch {
+      raw = await this.vlm.askJson(input.image, prompt, 2048, input.context);
+    } catch (error) {
+      if (input.context?.signal?.aborted) throw error;
       return null;
     }
     return this.parse(raw);
@@ -180,22 +201,12 @@ export class Reasoner {
       }
     }
 
-    let data: unknown;
+    let rec: z.infer<typeof reasonerSchema>;
     try {
-      data = JSON.parse(text);
+      rec = reasonerSchema.parse(JSON.parse(text));
     } catch {
-      // Fallback: use raw text as summary
-      return {
-        summary: raw.slice(0, 500).trim() || 'No summary available',
-        uiStateInterpretation: null,
-        actionHints: [],
-        anomalies: [],
-        reasoningConfidence: 0.3,
-      };
+      return null;
     }
-
-    if (typeof data !== 'object' || data === null) return null;
-    const rec = data as Record<string, unknown>;
 
     // Parse thinking trace (defensive: keep only valid phases)
     const thinkingTrace: ThinkingStep[] = [];
@@ -207,27 +218,23 @@ export class Reasoner {
       'self_review',
       'deliver',
     ]);
-    const rawTrace = Array.isArray(rec.thinking_trace) ? rec.thinking_trace : [];
+    const rawTrace = rec.thinking_trace;
     for (const step of rawTrace) {
-      if (typeof step !== 'object' || step === null) continue;
-      const s = step as Record<string, unknown>;
-      const phase = s.phase as string;
-      const content = String(s.content ?? '');
+      const phase = step.phase;
+      const content = step.content;
       if (validPhases.has(phase) && content) {
         thinkingTrace.push({ phase: phase as ThinkingStep['phase'], content });
       }
     }
 
-    const openQuestions = Array.isArray(rec.open_questions)
-      ? rec.open_questions.map((q) => String(q)).filter(Boolean)
-      : [];
+    const openQuestions = rec.open_questions.filter(Boolean);
 
     return {
-      summary: String(rec.summary ?? ''),
-      uiStateInterpretation: (rec.ui_state_interpretation as string) ?? null,
-      actionHints: (rec.action_hints as ActionHint[]) ?? [],
-      anomalies: (rec.anomalies as string[]) ?? [],
-      reasoningConfidence: Number(rec.reasoning_confidence ?? 0.5),
+      summary: rec.summary,
+      uiStateInterpretation: rec.ui_state_interpretation ?? null,
+      actionHints: rec.action_hints as ActionHint[],
+      anomalies: rec.anomalies,
+      reasoningConfidence: Math.min(1, Math.max(0, rec.reasoning_confidence)),
       thinkingTrace: thinkingTrace.length > 0 ? thinkingTrace : undefined,
       openQuestions: openQuestions.length > 0 ? openQuestions : undefined,
     };

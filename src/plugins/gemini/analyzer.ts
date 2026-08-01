@@ -11,6 +11,7 @@
  */
 
 import type { RequestContext } from '../../core/types.js';
+import { z } from 'zod';
 import { callGemini, geminiBoxToPixels, stripFences } from './client.js';
 import type { GeminiKeyPool } from './key-pool.js';
 
@@ -83,6 +84,8 @@ export interface CombinedResult {
   regions: ExtractedRegion[];
   /** Layout / lighting / color analysis (vision spec §9–10). */
   layout: ExtractedLayout | null;
+  /** Validation issues for fields/items that were discarded while preserving valid data. */
+  warnings: string[];
 }
 
 /**
@@ -144,6 +147,63 @@ const VALID_TYPES: ReadonlySet<string> = new Set([
   'mixed',
 ]);
 
+const boxSchema = z.array(z.number().finite()).length(4);
+const nullableString = z.string().nullable().optional();
+const unitNumber = z.number().finite().min(0).max(1).nullable().optional();
+type RawRegion = {
+  id?: string;
+  name: string;
+  purpose?: string;
+  box_2d?: number[];
+  children?: RawRegion[];
+};
+const regionSchema: z.ZodType<RawRegion> = z.lazy(() => z.object({
+  id: z.string().optional(),
+  name: z.string(),
+  purpose: z.string().optional(),
+  box_2d: boxSchema.optional(),
+  children: z.array(regionSchema).optional(),
+}).passthrough());
+const layoutSchema = z.object({
+  composition: z.object({
+    rule_of_thirds: z.boolean().optional(), main_subject: nullableString,
+    camera_angle: nullableString, visual_hierarchy: nullableString,
+  }).passthrough().optional(),
+  lighting: z.object({
+    source: nullableString, direction: nullableString, temperature: nullableString,
+    brightness: unitNumber, contrast: unitNumber, shadow_type: nullableString,
+  }).passthrough().optional(),
+  color: z.object({
+    palette: z.array(z.string()).optional(), dominant: nullableString,
+    saturation: unitNumber, brightness: unitNumber, tone: nullableString,
+  }).passthrough().optional(),
+}).passthrough();
+const textBlockSchema = z.object({
+  text: z.string(), box_2d: boxSchema, language: z.string().nullable().optional(),
+  color: z.string().nullable().optional(), emphasis: z.string().nullable().optional(),
+}).passthrough();
+const objectSchema = z.object({
+  label: z.string(), box_2d: boxSchema, confidence: z.number().finite().optional(),
+}).passthrough();
+const tableSchema = z.object({
+  title: z.string().nullable().optional(), columns: z.array(z.string()),
+  rows: z.array(z.array(z.string())), box_2d: boxSchema.optional(),
+}).passthrough();
+const codeSchema = z.object({
+  language: z.string().nullable(), functions: z.array(z.string()),
+  errors: z.array(z.string()), snippet: z.string().nullable(),
+}).passthrough();
+const combinedSchema = z.object({
+  image_type: z.unknown().optional(), text_blocks: z.unknown().optional(),
+  objects: z.unknown().optional(), tables: z.unknown().optional(),
+  code: z.unknown().optional(), regions: z.unknown().optional(), layout: z.unknown().optional(),
+}).passthrough();
+
+function clampConfidence(value: number, fallback: number): number {
+  const number = Number.isFinite(value) ? value : fallback;
+  return Math.min(1, Math.max(0, number));
+}
+
 // Per-context memoization: WeakMap keyed by the context object so entries are
 // garbage-collected automatically when the request finishes.
 const cache = new WeakMap<RequestContext, Promise<CombinedResult>>();
@@ -184,6 +244,7 @@ async function doAnalyze(
     imageBase64: image.toString('base64'),
     timeoutMs,
     jsonOutput: true,
+    context,
   });
   const base = parseCombined(raw, context.imageWidth, context.imageHeight);
 
@@ -198,10 +259,10 @@ async function doAnalyze(
 }
 
 export function parseCombined(raw: string, width: number, height: number): CombinedResult {
-  let data: Record<string, unknown>;
+  let data: z.infer<typeof combinedSchema>;
+  const warnings: string[] = [];
   try {
-    const parsed = JSON.parse(stripFences(raw));
-    data = typeof parsed === 'object' && parsed !== null ? parsed : {};
+    data = combinedSchema.parse(JSON.parse(stripFences(raw)));
   } catch {
     return {
       imageType: null,
@@ -211,19 +272,32 @@ export function parseCombined(raw: string, width: number, height: number): Combi
       code: null,
       regions: [],
       layout: null,
+      warnings: ['Gemini combined response was not valid JSON'],
     };
   }
 
-  const rawType = data.image_type as string | undefined;
+  const rawType = typeof data.image_type === 'string' ? data.image_type : undefined;
   const imageType =
     rawType && VALID_TYPES.has(rawType) ? (rawType as ImageType) : null;
 
-  const rawTexts = Array.isArray(data.text_blocks) ? data.text_blocks : [];
-  const rawObjects = Array.isArray(data.objects) ? data.objects : [];
-  const rawTables = Array.isArray(data.tables) ? data.tables : [];
+  const safeItems = <T>(field: string, value: unknown, schema: z.ZodType<T>): T[] => {
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) {
+      warnings.push(`Gemini ${field} was not an array and was ignored`);
+      return [];
+    }
+    return value.flatMap((item, index) => {
+      const parsed = schema.safeParse(item);
+      if (parsed.success) return [parsed.data];
+      warnings.push(`Gemini ${field}[${index}] was malformed and was ignored`);
+      return [];
+    });
+  };
+  const rawTexts = safeItems('text_blocks', data.text_blocks, textBlockSchema);
+  const rawObjects = safeItems('objects', data.objects, objectSchema);
+  const rawTables = safeItems('tables', data.tables, tableSchema);
 
   const textBlocks = rawTexts
-    .filter((d): d is Record<string, unknown> => typeof d === 'object' && d !== null)
     .map((d) => ({
       text: String(d.text ?? ''),
       bbox: geminiBoxToPixels((d.box_2d as number[]) ?? [], width, height),
@@ -235,31 +309,29 @@ export function parseCombined(raw: string, width: number, height: number): Combi
     .filter((b) => b.text.trim().length > 0);
 
   const objects = rawObjects
-    .filter((d): d is Record<string, unknown> => typeof d === 'object' && d !== null)
     .map((d) => ({
       label: String(d.label ?? 'object'),
       bbox: geminiBoxToPixels((d.box_2d as number[]) ?? [], width, height),
-      confidence: Number(d.confidence ?? 0.85),
+      confidence: clampConfidence(d.confidence ?? 0.85, 0.85),
     }))
     .filter((o) => o.label.trim().length > 0);
 
   const tables = rawTables
-    .filter((d): d is Record<string, unknown> => typeof d === 'object' && d !== null)
     .map((d) => ({
       title: (d.title as string) ?? null,
-      columns: Array.isArray(d.columns) ? d.columns.map((c) => String(c)) : [],
-      rows: Array.isArray(d.rows)
-        ? d.rows
-            .filter((r): r is unknown[] => Array.isArray(r))
-            .map((r) => r.map((cell) => String(cell)))
-        : [],
+      columns: d.columns,
+      rows: d.rows,
       box_2d: Array.isArray(d.box_2d)
         ? geminiBoxToPixels(d.box_2d as number[], width, height)
         : undefined,
     }))
     .filter((t) => t.columns.length > 0 || t.rows.length > 0);
 
-  const rawCode = data.code;
+  const parsedCode = codeSchema.safeParse(data.code);
+  const rawCode = parsedCode.success ? parsedCode.data : null;
+  if (data.code !== undefined && data.code !== null && !parsedCode.success) {
+    warnings.push('Gemini code was malformed and was ignored');
+  }
   let code: CodeInfo | null = null;
   if (rawCode && typeof rawCode === 'object') {
     const c = rawCode as Record<string, unknown>;
@@ -274,8 +346,8 @@ export function parseCombined(raw: string, width: number, height: number): Combi
   }
 
   // Regions: parse with optional nested children.
-  const rawRegions = Array.isArray(data.regions) ? data.regions : [];
-  const parseRegion = (d: Record<string, unknown>): ExtractedRegion | null => {
+  const rawRegions = safeItems('regions', data.regions, regionSchema);
+  const parseRegion = (d: RawRegion): ExtractedRegion | null => {
     const name = String(d.name ?? '').trim();
     if (!name) return null;
     return {
@@ -287,20 +359,22 @@ export function parseCombined(raw: string, width: number, height: number): Combi
         : undefined,
       children: Array.isArray(d.children)
         ? d.children
-            .filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null)
             .map((c) => parseRegion(c))
             .filter((r): r is ExtractedRegion => r !== null)
         : undefined,
     };
   };
   const regions = rawRegions
-    .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
     .map((r) => parseRegion(r))
     .filter((r): r is ExtractedRegion => r !== null);
 
   // Layout / lighting / color (best-effort).
   let layout: ExtractedLayout | null = null;
-  const rawLayout = data.layout;
+  const parsedLayout = layoutSchema.safeParse(data.layout);
+  const rawLayout = parsedLayout.success ? parsedLayout.data : null;
+  if (data.layout !== undefined && data.layout !== null && !parsedLayout.success) {
+    warnings.push('Gemini layout was malformed and was ignored');
+  }
   if (rawLayout && typeof rawLayout === 'object') {
     const l = rawLayout as Record<string, unknown>;
     const composition =
@@ -351,7 +425,7 @@ export function parseCombined(raw: string, width: number, height: number): Combi
     }
   }
 
-  return { imageType, textBlocks, objects, tables, code, regions, layout };
+  return { imageType, textBlocks, objects, tables, code, regions, layout, warnings };
 }
 
 /**

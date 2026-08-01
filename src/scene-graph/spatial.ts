@@ -3,7 +3,7 @@
  *
  * Computes geometric relations (left_of, above, near, contains...) purely
  * from bounding boxes. No VLM required — runs in all modes.
- * 
+ *
  * Uses spatial grid indexing to optimize O(n²) to O(n*k) for dense images.
  */
 
@@ -50,7 +50,7 @@ class SpatialGrid {
   getNearby(entity: Entity): Entity[] {
     const nearby = new Set<Entity>();
     const { x1, y1, x2, y2 } = entity.bbox;
-    
+
     // Check cells that bbox touches + 1 cell margin
     const minCellX = Math.floor(x1 / this.cellSize) - 1;
     const maxCellX = Math.floor(x2 / this.cellSize) + 1;
@@ -130,7 +130,7 @@ export class SpatialGraphBuilder {
       for (const b of nearby) {
         if (a.entityId === b.entityId) continue;
         seenIds.add(b.entityId);
-        
+
         if (this.contains(a.bbox, b.bbox)) {
           edges.push(this.edge(a.entityId, 'contains', b.entityId));
           continue;

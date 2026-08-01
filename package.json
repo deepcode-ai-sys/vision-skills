@@ -1,7 +1,7 @@
 {
   "name": "vision-skills",
   "version": "0.1.0",
-  "description": "Turn images into structured JSON for text-only or vision-weak AI models. Cloud-only, multi-provider, plugin-based.",
+  "description": "Structured image analysis for LLMs via SDK, MCP, REST, Gemini, and explicit local or remote specialists.",
   "type": "module",
   "bin": {
     "vision-skills": "./dist/cli.js",
@@ -18,12 +18,27 @@
     "./server": {
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp-server.d.ts",
+      "import": "./dist/mcp-server.js"
     }
   },
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "CHANGELOG.md",
+    "LICENSE",
+    "SKILL.md",
+    "setup-integrations.bat",
+    "setup-integrations.sh",
+    "scripts/add-json-mcp.mjs",
+    "benchmark/README.md",
+    "benchmark/run.mjs",
+    "benchmark/manifest.json",
+    "benchmark/manifest.schema.json",
+    "benchmark/fixtures",
+    "benchmark/expected"
   ],
   "scripts": {
     "build": "tsc",
@@ -32,6 +47,9 @@
     "test:watch": "vitest --config vitest.config.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "benchmark": "npm run benchmark:mock",
+    "benchmark:mock": "npm run build && node benchmark/run.mjs mock",
+    "test:package": "node scripts/package-smoke.mjs",
     "serve": "node dist/server/start.js",
     "prepublishOnly": "npm run build"
   },
@@ -45,7 +63,12 @@
     "multimodal",
     "scene-graph",
     "computer-vision",
-    "gemini"
+    "gemini",
+    "mcp",
+    "paddleocr",
+    "docling",
+    "omniparser",
+    "local-vlm"
   ],
   "author": "",
   "license": "MIT",
@@ -58,13 +81,16 @@
   },
   "homepage": "https://github.com/deepcode-ai-sys/vision-skills#readme",
   "engines": {
-    "node": ">=18"
+    "node": ">=20.9"
   },
   "dependencies": {
-    "sharp": "^0.33.5"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "ipaddr.js": "^2.4.0",
+    "sharp": "^0.35.3",
+    "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "fastify": "^4.28.0"
+    "fastify": "^5.11.0"
   },
   "peerDependenciesMeta": {
     "fastify": {
@@ -75,9 +101,10 @@
     "@eslint/js": "^9.9.0",
     "@types/node": "^22.5.0",
     "eslint": "^9.9.0",
-    "fastify": "^4.28.0",
+    "fastify": "^5.11.0",
     "typescript": "^5.5.4",
     "typescript-eslint": "^8.2.0",
-    "vitest": "^2.0.5"
+    "vite": "^6.4.3",
+    "vitest": "^4.1.10"
   }
 }

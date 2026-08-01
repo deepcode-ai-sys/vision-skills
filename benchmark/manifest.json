@@ -1,0 +1,10 @@
+{
+  "$schema": "./manifest.schema.json",
+  "version": 1,
+  "cases": [{
+    "id": "tiny-ui-001",
+    "fixture": "fixtures/mock-input.json",
+    "expected": "expected/tiny-ui-001.json",
+    "capabilities": ["ocr", "objects", "ui"]
+  }]
+}

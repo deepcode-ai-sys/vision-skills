@@ -41,6 +41,7 @@ export class ProviderOrchestrator {
     const settled = await Promise.allSettled(
       pluginTypes.map((t) => this.runTypeWithFallback(t, image, context)),
     );
+    context.signal?.throwIfAborted();
 
     const results: PluginResult[] = [];
     settled.forEach((r, i) => {
@@ -65,6 +66,7 @@ export class ProviderOrchestrator {
     let last: PluginResult | null = null;
 
     for (const plugin of plugins) {
+      context.signal?.throwIfAborted();
       if (this.unhealthy.has(plugin.name)) {
         const ok = await this.recheck(plugin);
         if (!ok) continue;

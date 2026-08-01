@@ -9,15 +9,37 @@
 import type {
   ClassificationResult,
   ModeSelection,
+  ModePolicy,
   PluginType,
   ProcessingMode,
+  RequestedMode,
 } from './types.js';
 
-const MODE_PLUGIN_TYPES: Record<ProcessingMode, PluginType[]> = {
-  basic: ['ocr'],
-  standard: ['ocr', 'detection', 'ui'],
-  advanced: ['ocr', 'detection', 'ui', 'segmentation', 'face', 'pose'],
-  full: ['ocr', 'detection', 'ui', 'segmentation', 'face', 'pose', 'vlm'],
+const MODE_POLICIES: Record<ProcessingMode, ModePolicy> = {
+  basic: {
+    pluginTypes: ['ocr'],
+    combinedStructuredFields: false,
+    semantic: false,
+    reasoner: false,
+  },
+  standard: {
+    pluginTypes: ['ocr', 'detection', 'ui'],
+    combinedStructuredFields: true,
+    semantic: false,
+    reasoner: false,
+  },
+  advanced: {
+    pluginTypes: ['ocr', 'detection', 'ui'],
+    combinedStructuredFields: true,
+    semantic: true,
+    reasoner: false,
+  },
+  full: {
+    pluginTypes: ['ocr', 'detection', 'ui'],
+    combinedStructuredFields: true,
+    semantic: true,
+    reasoner: true,
+  },
 };
 
 const MODE_COST_RANGE: Record<ProcessingMode, string> = {
@@ -32,13 +54,13 @@ export class ModeRouter {
 
   select(
     classification: ClassificationResult,
-    requestedMode?: ProcessingMode,
+    requestedMode: RequestedMode = 'auto',
     budgetRemaining?: number,
   ): ModeSelection {
     let mode: ProcessingMode;
     let reason: string;
 
-    if (requestedMode) {
+    if (requestedMode !== 'auto') {
       mode = requestedMode;
       reason = 'client_explicit_request';
     } else {
@@ -89,6 +111,11 @@ export class ModeRouter {
   }
 
   static pluginTypesFor(mode: ProcessingMode): PluginType[] {
-    return MODE_PLUGIN_TYPES[mode] ?? ['ocr'];
+    return [...MODE_POLICIES[mode].pluginTypes];
+  }
+
+  static policyFor(mode: ProcessingMode): ModePolicy {
+    const policy = MODE_POLICIES[mode];
+    return { ...policy, pluginTypes: [...policy.pluginTypes] };
   }
 }

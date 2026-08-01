@@ -53,8 +53,8 @@ async function main() {
     process.exit(1);
   }
 
-  // 2. Analyze the image
-  const result = await vision.analyze(imagePath, { mode: 'standard' });
+  // 2. Analyze the image. Omitting mode uses the SDK's real auto router.
+  const result = await vision.analyze(imagePath);
 
   // 3. Turn JSON into text context
   const context = toLLMContext(result);

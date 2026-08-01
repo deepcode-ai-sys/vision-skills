@@ -1,94 +1,18 @@
-﻿import { describe, it, expect } from 'vitest';
+﻿import { afterEach, describe, it, expect, vi } from 'vitest';
 
-import { GoogleVisionOCRPlugin } from '../src/plugins/ocr/google-vision.js';
-import { GoogleVisionDetectionPlugin } from '../src/plugins/detection/google-vision.js';
 import { SemanticGraphBuilder, type VLMClient } from '../src/scene-graph/semantic.js';
 import { Reasoner } from '../src/reasoner/reasoner.js';
 import { SpatialGraphBuilder } from '../src/scene-graph/spatial.js';
 import { ImageProcessor } from '../src/utils/image.js';
 import { BoundingBox, type Entity } from '../src/core/types.js';
+import { ModeRouter } from '../src/core/router.js';
 
-describe('GoogleVisionOCRPlugin.parse', () => {
-  const plugin = new GoogleVisionOCRPlugin('test-key');
+const originalFetch = globalThis.fetch;
 
-  it('parses fullTextAnnotation', () => {
-    const parsed = plugin.parse({
-      responses: [
-        {
-          fullTextAnnotation: {
-            text: 'Hello',
-            pages: [
-              {
-                blocks: [
-                  {
-                    confidence: 0.98,
-                    boundingBox: {
-                      vertices: [
-                        { x: 0, y: 0 },
-                        { x: 100, y: 0 },
-                        { x: 100, y: 30 },
-                        { x: 0, y: 30 },
-                      ],
-                    },
-                    paragraphs: [{ words: [{ symbols: [{ text: 'H' }, { text: 'i' }] }] }],
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      ],
-    });
-    const blocks = parsed.text_blocks as Array<Record<string, unknown>>;
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0]!.text).toBe('Hi');
-    expect(blocks[0]!.bbox).toEqual([0, 0, 100, 30]);
-  });
-
-  it('throws on error response', () => {
-    expect(() => plugin.parse({ responses: [{ error: { message: 'bad' } }] })).toThrow('bad');
-  });
-
-  it('handles empty response', () => {
-    const parsed = plugin.parse({ responses: [{}] });
-    expect(parsed.text_blocks).toEqual([]);
-  });
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  vi.restoreAllMocks();
 });
-
-describe('GoogleVisionDetectionPlugin.parse', () => {
-  const plugin = new GoogleVisionDetectionPlugin('test-key');
-
-  it('converts normalized vertices to pixels', () => {
-    const parsed = plugin.parse(
-      {
-        responses: [
-          {
-            localizedObjectAnnotations: [
-              {
-                name: 'Person',
-                score: 0.95,
-                boundingPoly: {
-                  normalizedVertices: [
-                    { x: 0.1, y: 0.1 },
-                    { x: 0.3, y: 0.1 },
-                    { x: 0.3, y: 0.5 },
-                    { x: 0.1, y: 0.5 },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      },
-      1000,
-      800,
-    );
-    const objects = parsed.objects as Array<Record<string, unknown>>;
-    expect(objects[0]!.label).toBe('Person');
-    expect(objects[0]!.bbox).toEqual([100, 80, 300, 400]);
-  });
-});
-
 class FakeVLM implements VLMClient {
   calls = 0;
   constructor(private response: string) {}
@@ -148,8 +72,19 @@ describe('SemanticGraphBuilder', () => {
     const edges = await new SemanticGraphBuilder(vlm).build(Buffer.from(''), entities);
     expect(edges).toHaveLength(1);
   });
-});
 
+  it('clamps semantic confidence and rejects malformed edge arrays', async () => {
+    const high = new FakeVLM(
+      '[{"subject_id":"e1","relation":"holding","object_id":"e2","confidence":9}]',
+    );
+    expect((await new SemanticGraphBuilder(high).build(Buffer.from(''), entities))[0]!.confidence)
+      .toBe(1);
+    const malformed = new FakeVLM(
+      '[{"subject_id":"e1","relation":"holding","object_id":"e2","confidence":"high"}]',
+    );
+    expect(await new SemanticGraphBuilder(malformed).build(Buffer.from(''), entities)).toEqual([]);
+  });
+});
 describe('Reasoner', () => {
   const entities = [entity('e1', 'button', [0, 0, 50, 20])];
 
@@ -170,7 +105,7 @@ describe('Reasoner', () => {
     expect(out?.reasoningConfidence).toBe(0.9);
   });
 
-  it('falls back to raw text on invalid JSON', async () => {
+  it('rejects invalid JSON rather than treating it as validated reasoning', async () => {
     const vlm = new FakeVLM('This shows a form.');
     const out = await new Reasoner(vlm).reason({
       image: Buffer.from(''),
@@ -178,7 +113,7 @@ describe('Reasoner', () => {
       sceneGraph: { spatial: [], semantic: [] },
       imageType: 'screen_ui',
     });
-    expect(out?.summary).toContain('form');
+    expect(out).toBeNull();
   });
 
   it('parses fable-style thinking trace', async () => {
@@ -227,8 +162,50 @@ describe('Reasoner', () => {
       sceneGraph: { spatial: [], semantic: [] },
       imageType: 'screen_ui',
     });
-    expect(out?.thinkingTrace).toHaveLength(1);
-    expect(out?.thinkingTrace![0]!.phase).toBe('observe');
+    expect(out).toBeNull();
+  });
+
+  it('clamps reasoning confidence and rejects malformed action hints', async () => {
+    const clamped = await new Reasoner(new FakeVLM(
+      '{"summary":"ok","reasoning_confidence":4}',
+    )).reason({ image: Buffer.from(''), entities, sceneGraph: { spatial: [], semantic: [] }, imageType: 'screen_ui' });
+    expect(clamped?.reasoningConfidence).toBe(1);
+    const malformed = await new Reasoner(new FakeVLM(
+      '{"summary":"bad","action_hints":[{"action":"click"}]}',
+    )).reason({ image: Buffer.from(''), entities, sceneGraph: { spatial: [], semantic: [] }, imageType: 'screen_ui' });
+    expect(malformed).toBeNull();
+  });
+});
+
+describe('ModeRouter', () => {
+  const classification = {
+    type: 'document' as const,
+    confidence: 0.9,
+    classifierLayerUsed: 'test',
+    characteristics: {
+      hasUiElements: false, hasText: true, isPhoto: false, aspectRatio: 0.7, hasExif: false,
+    },
+  };
+
+  it('auto routes a simple document to basic', () => {
+    const selection = new ModeRouter().select(classification, 'auto');
+    expect(selection.modeSelected).toBe('basic');
+    expect(selection.reason).toBe('simple_document_text_extraction');
+  });
+
+  it.each([
+    ['basic', false, false, false],
+    ['standard', true, false, false],
+    ['advanced', true, true, false],
+    ['full', true, true, true],
+  ] as const)('defines structured/semantic/reasoner policy for %s', (
+    mode, structured, semantic, reasoner,
+  ) => {
+    const policy = ModeRouter.policyFor(mode);
+    expect(policy.combinedStructuredFields).toBe(structured);
+    expect(policy.semantic).toBe(semantic);
+    expect(policy.reasoner).toBe(reasoner);
+    expect(policy.pluginTypes).toEqual(mode === 'basic' ? ['ocr'] : ['ocr', 'detection', 'ui']);
   });
 });
 
@@ -271,6 +248,22 @@ describe('ImageProcessor SSRF protection', () => {
 
   it('blocks loopback IP', async () => {
     await expect(proc.assertUrlSafe('http://127.0.0.1/x.jpg')).rejects.toThrow(/SSRF|blocked/);
+  });
+
+  it('rejects oversized URL responses before reading the body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: (name: string) => (name.toLowerCase() === 'content-length' ? String(11 * 1024 * 1024) : null) },
+      body: {
+        getReader: () => {
+          throw new Error('body should not be read');
+        },
+      },
+    } as unknown as Response);
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(proc.load('http://93.184.216.34/x.jpg')).rejects.toThrow(/size limit/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

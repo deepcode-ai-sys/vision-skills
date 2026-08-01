@@ -20,6 +20,18 @@ export default tseslint.config(
     },
   },
   {
+    files: ['benchmark/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        performance: 'readonly',
+        process: 'readonly',
+        structuredClone: 'readonly',
+      },
+    },
+    rules: { 'no-console': 'off' },
+  },
+  {
     ignores: ['dist/', 'node_modules/', 'scripts/', '*.config.js', '*.config.ts'],
   },
 );

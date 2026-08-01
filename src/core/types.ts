@@ -14,6 +14,8 @@ export type ImageType = (typeof IMAGE_TYPES)[number];
 
 export const PROCESSING_MODES = ['basic', 'standard', 'advanced', 'full'] as const;
 export type ProcessingMode = (typeof PROCESSING_MODES)[number];
+export const REQUESTED_MODES = ['auto', ...PROCESSING_MODES] as const;
+export type RequestedMode = (typeof REQUESTED_MODES)[number];
 
 export const PLUGIN_TYPES = [
   'ocr',
@@ -169,6 +171,13 @@ export interface ModeSelection {
   estimatedCostRange: string;
 }
 
+export interface ModePolicy {
+  pluginTypes: PluginType[];
+  combinedStructuredFields: boolean;
+  semantic: boolean;
+  reasoner: boolean;
+}
+
 // ============================================================================
 // Plugin result
 // ============================================================================
@@ -195,7 +204,8 @@ export interface Entity {
   entityId: string;
   label: string;
   bbox: BoundingBox;
-  confidence: number;
+  /** Null means the provider did not report confidence. */
+  confidence: number | null;
   polygon?: number[][];
   text?: string | null;
   visiblePercent?: number | null;
@@ -366,8 +376,47 @@ export interface VisionResponse {
   providerResults: PluginResult[];
   costActualTotal: number;
   latencyMsTotal: number;
+  /** Aggregate confidence for this request, normalized to 0..1. */
+  confidence: number;
+  provenance: ResponseProvenance;
+  telemetry?: RequestTelemetry;
+  /** Explicit specialist routing trace; absent on the unchanged Gemini-only path. */
+  route?: import('../specialists/types.js').SpecialistRouteTrace[];
+  /** Explicit specialist call metrics; absent when specialists are not configured. */
+  usage?: import('../specialists/types.js').SpecialistUsage;
   errors: string[];
   warnings: string[];
+}
+
+export interface ResponseProvenance {
+  requestId: string;
+  requestedMode: RequestedMode;
+  modeSelectionReason: string;
+  classifier: string;
+  providers: string[];
+  cacheHit: boolean;
+  /** Metadata about the request that originally populated a cache hit. */
+  cacheOrigin?: {
+    requestId: string;
+    latencyMsTotal: number;
+    costActualTotal: number;
+    providers: string[];
+  };
+}
+
+export interface GeminiTelemetry {
+  /** Backward-compatible alias for attempts. */
+  calls: number;
+  attempts?: number;
+  successes?: number;
+  failures?: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+export interface RequestTelemetry {
+  gemini: GeminiTelemetry;
 }
 
 // ============================================================================
@@ -382,6 +431,9 @@ export interface RequestContext {
   imageType: ImageType;
   clientApiKey?: string;
   enableReasoner: boolean;
+  analysisDepth?: 'fast' | 'deep';
+  signal?: AbortSignal;
+  reportProgress?: (progress: number, message?: string) => void | Promise<void>;
   metadata: Record<string, unknown>;
 }
 

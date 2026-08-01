@@ -18,7 +18,8 @@ import {
 
 /**
  * A toy OCR provider. In reality you'd call your own API here.
- * Return { confidence, text_blocks: [{ text, bbox:[x1,y1,x2,y2], confidence }] }
+ * Plugin payloads use { text_blocks: [{ text, bbox:[x1,y1,x2,y2], confidence }] }.
+ * Final response boxes serialize as { x1, y1, x2, y2 }.
  */
 class MyCustomOCR extends BasePlugin {
   readonly name = 'my_custom_ocr';

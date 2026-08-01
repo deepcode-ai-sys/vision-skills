@@ -111,7 +111,7 @@ export class Normalizer {
       entityId: this.nextId(),
       label: 'text_block',
       bbox: this.parseBbox(block.bbox as number[]),
-      confidence: Number(block.confidence ?? 0),
+      confidence: this.confidence(block.confidence),
       text: (block.text as string) ?? null,
       // Tier 4: carry rich text attributes (color/emphasis) when present.
       metadata: {
@@ -128,7 +128,7 @@ export class Normalizer {
       entityId: this.nextId(),
       label: this.normLabel((obj.label as string) ?? 'object'),
       bbox: this.parseBbox(obj.bbox as number[]),
-      confidence: Number(obj.confidence ?? 0),
+      confidence: this.confidence(obj.confidence),
       metadata: {},
       sourcePlugins: [source],
     };
@@ -139,7 +139,7 @@ export class Normalizer {
       entityId: this.nextId(),
       label: this.normLabel((el.label as string) ?? 'ui_element'),
       bbox: this.parseBbox(el.bbox as number[]),
-      confidence: Number(el.confidence ?? 0),
+      confidence: this.confidence(el.confidence),
       text: (el.text as string) ?? null,
       elementType: (el.element_type as string) ?? null,
       clickable: (el.clickable as boolean) ?? null,
@@ -155,7 +155,7 @@ export class Normalizer {
       entityId: this.nextId(),
       label: 'layout_region',
       bbox: this.parseBbox(region.bbox as number[]),
-      confidence: Number(region.confidence ?? 1),
+      confidence: this.confidence(region.confidence, 1),
       elementType: (region.type as string) ?? null,
       metadata: {},
       sourcePlugins: [source],
@@ -166,7 +166,15 @@ export class Normalizer {
     if (!Array.isArray(coords) || coords.length !== 4) {
       return new BoundingBox(0, 0, 0, 0);
     }
-    return BoundingBox.fromList(coords.map(Number));
+    const values = coords.map(Number);
+    if (values.some((value) => !Number.isFinite(value))) return new BoundingBox(0, 0, 0, 0);
+    const [x1, y1, x2, y2] = values as [number, number, number, number];
+    return new BoundingBox(Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2));
+  }
+
+  private confidence(value: unknown, fallback = 0): number {
+    const number = Number(value ?? fallback);
+    return Number.isFinite(number) ? Math.min(1, Math.max(0, number)) : fallback;
   }
 
   private normLabel(label: string): string {
@@ -204,7 +212,7 @@ export class Normalizer {
 
   private mergeGroup(group: Entity[]): Entity {
     if (group.length === 1) return group[0]!;
-    const base = group.reduce((best, e) => (e.confidence > best.confidence ? e : best));
+    const base = group.reduce((best, e) => ((e.confidence ?? -1) > (best.confidence ?? -1) ? e : best));
     const sources = new Set<string>();
     for (const e of group) e.sourcePlugins.forEach((s) => sources.add(s));
     base.sourcePlugins = [...sources];

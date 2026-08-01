@@ -8,88 +8,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **Rich text attributes (color + emphasis).** Each text block can now carry a
-  `color` (hex) and `emphasis` ("heading" / "bold" / "error" / "warning" /
-  "success" / "muted" / "link"), surfaced in entity metadata. Lets a text-only
-  model infer visual context — e.g. which tab is selected (white/bold) vs
-  muted (gray), or that a message is an error (red). Verified live: 90/115
-  blocks on the dashboard carried color/emphasis. No extra API calls.
-- **Code understanding.** When the image shows source code, a terminal, or an
-  IDE, the response includes `code` (language, function/class names, error /
-  stack-trace text, a representative snippet), else `null`. No extra API calls.
-- **Deep (multi-region) analysis mode.** Set `analysisDepth: 'deep'` to tile
-  large/dense images, read each tile at higher effective resolution, then
-  merge + dedupe. On a real dashboard this raised text extraction from ~41-95
-  blocks (single pass, unstable) to ~140-210 blocks — catching small text a
-  single downscaled pass misses. Costs more calls (one per tile), so it's
-  opt-in; default stays `'fast'` (single pass).
-- **Structured table extraction.** The analyzer now recognizes tables/lists
-  (dashboards, invoices, logs) and extracts them into `tables[]` with title,
-  columns, and rows — instead of only scattered text blocks. Verified live on
-  a real dashboard: the "Recent Requests" table was extracted as 3 columns ×
-  13 rows. This is a key differentiator from a single generic model call.
-- **Deeper analysis prompt.** The Gemini prompt now instructs exhaustive
-  reading (small text, number+unit pairs, every label/status/timestamp) and
-  table extraction, making analysis meaningfully deeper than "extract text".
-- **Multi-key rotation (`GeminiKeyPool`).** Provide many Gemini keys via
-  `geminiApiKeys: [...]` (or `GEMINI_API_KEYS` env, comma-separated). The pool
-  rotates keys automatically: rate-limited (429) or bad (404/403/400) keys are
-  cooled down and skipped, successful keys are preferred. This works around the
-  free-tier per-key/per-day limits. Verified: 13/13 consecutive runs on a real
-  dense dashboard screenshot succeeded (~90 text blocks each, ~6-15s).
+- **Explicit specialist routing.** Opt-in OCR, object, UI, table, region,
+  layout, and code providers can augment or replace capabilities through
+  explicit ordered fallback chains. Strict codecs cover `canonical-v1`,
+  PaddleOCR classic, Docling JSON, OmniParser v2, and OpenAI-compatible local
+  multimodal chat completions. Models and provider services are not bundled.
+- **Specialist observability.** Responses include route traces and operational
+  usage metrics when specialists are configured: attempted and selected
+  providers, grouped call counts, per-provider counts, latency, and failures.
+  Missing specialist confidence is preserved as `null` rather than fabricated.
+- **Official MCP server.** The MCP adapter now uses the official Model Context
+  Protocol SDK with registered tools, structured content, standards-compliant
+  errors, bounded output/truncation metadata, cancellation, and progress
+  notifications.
+- **Hardened REST adapter.** Added liveness/readiness endpoints, timing-safe API
+  key checks for remote access, remote local-path rejection, exact-origin CORS,
+  concurrency and timeout limits, cancellation on disconnect, bounded output,
+  and cache administration endpoints.
+- **Injectable cache.** `cacheBackend` accepts the exported asynchronous
+  `CacheBackend` contract; the in-memory TTL backend remains the default.
+- **Response confidence, provenance, and telemetry.** Top-level output now
+  distinguishes aggregate request confidence, request/provider/cache
+  provenance, Gemini call/token telemetry, and specialist route usage.
+- **Deterministic mock benchmark.** Reports CER, WER, IoU box metrics, routing,
+  calls, and p50/p95 harness latency from committed canonical fixture data.
+  It validates metric plumbing only and does not measure live provider accuracy.
+- **Rich structured analysis.** Added text color/emphasis metadata, code
+  context, tables, regions, layout/lighting/color, and opt-in tiled `deep`
+  analysis for dense images.
+- **Multi-key Gemini rotation.** `geminiApiKeys` and `GEMINI_API_KEYS` provide
+  ordered key-pool input with cooldown and retry behavior.
 
 ### Changed
-- **Default Gemini model switched to `gemini-flash-lite-latest`.**
-  `gemini-2.5-flash` has a very low free-tier limit (20 requests/day/project)
-  and is slower (~16s on dense images). `flash-lite` is ~4x faster (~4-8s) with
-  a higher free quota, and reads Vietnamese text correctly. Verified live.
-- Tuned Gemini timeouts: per-attempt fetch timeout (20s) separated from the
-  orchestrator budget (60s) so a hanging/limited key is abandoned quickly and
-  rotation proceeds, instead of blocking on one slow key.
+- Node.js >=20.9 is now the supported runtime and CI floor.
+- The optional Fastify peer and development server now require secure Fastify 5
+  (`^5.11.0`), and the test stack uses Vitest 4 with a Node 20.9-compatible Vite 6.
+- The SDK default mode is now true `auto`; explicit `basic`, `standard`,
+  `advanced`, and `full` requests remain available. Auto selects `basic` for a
+  confident simple document and otherwise fails safe to `standard`.
+- Mode policy is exact: Basic runs OCR; Standard adds detection, UI, and
+  combined structured fields; Advanced adds semantic relationships; Full adds
+  the reasoner.
+- The default Gemini model is `gemini-flash-lite-latest`.
+- Gemini per-attempt timeout and overall orchestration budget are separated so
+  key fallback can proceed after a timed-out attempt.
+- Public final bounding boxes serialize as `{ x1, y1, x2, y2 }` pixel objects.
+  Array boxes remain the plugin and specialist canonical integration format.
+- Documentation now describes Gemini as the built-in general provider rather
+  than the only provider, and records specialist, REST, URL-input, benchmark,
+  and production-audit limitations without claiming production readiness.
 
 ### Fixed
-- **Scene graph edge explosion fixed.** Directional/near relations are now
-  computed only against each entity's K nearest neighbors (default 6) instead
-  of every pair. On a real dashboard screenshot (121 entities) this cut the
-  spatial graph from ~28,600 edges to ~340 meaningful ones. `contains` and
-  `overlapping` are still computed for all pairs. Configurable via
-  `maxNeighbors`.
-- **Semantic relations are now image-type aware.** Real-world images use
-  physical relations (holding, wearing...); UI/document images use UI
-  relations (contains, part_of, labels, controls, submits...). Previously a
-  button was reported as "holding" its label text — now correctly "part_of" /
-  "labels". Verified live.
-- **Classifier accuracy improved** by reusing Gemini's own image-type
-  classification (returned in the same combined call — no extra API cost).
-  A login screenshot that was misclassified as `mixed` is now correctly
-  `screen_ui`. Verified live.
-- **Advanced/Full mode ~2x faster.** Semantic graph and reasoner now run in
-  parallel instead of sequentially (39s -> ~20s on the test image).
-- **Default Gemini model updated** from `gemini-2.0-flash` (returns 429 /
-  restricted on current free tier) to `gemini-2.5-flash`, verified working
-  end-to-end against the live API.
-- **Increased Gemini plugin timeout** to 30s. `gemini-2.5-flash` uses
-  reasoning and can take 10-20s per call, which exceeded the previous 8s
-  default and caused spurious timeouts.
-- Verified end-to-end with a real API key: OCR (incl. Vietnamese), object
-  detection with bounding boxes, and combined single-call behavior all work.
-
-### Changed
-- **Gemini calls combined.** OCR and object detection now share a single
-  Gemini API call per request (memoized per request context) instead of two
-  separate calls — roughly halves token cost and rate-limit pressure for
-  `standard`+ modes.
-- **Gemini client now retries transient failures** (429/5xx and network
-  errors) with exponential backoff + jitter, honoring the `Retry-After`
-  header. Client errors (4xx except 429) fail fast. Configurable via `retry`.
-- **Smarter classifier confidence.** Confidence is now margin-based (winner
-  vs runner-up), so ambiguous images get lower confidence and fall back to
-  `mixed`/Standard mode. Added brightness + color-variety signals to better
-  separate documents, UI, and photos.
-
-### Added
-- UI/layout hierarchy: entities now get a `parentId` set to the tightest
-  containing entity (`SpatialGraphBuilder.assignHierarchy`).
+- Directional and near scene-graph edges are bounded to nearest neighbors;
+  containment and overlap continue to use all relevant pairs.
+- Semantic relation taxonomies now follow effective image type: physical for
+  real-world images, UI/document relations for screens and documents, and both
+  for mixed images.
+- Advanced semantic analysis and Full reasoner work can execute in parallel.
+- Gemini OCR and detection share memoized combined analysis within a request.
+- Transient Gemini failures use retry/backoff while non-retryable client errors
+  fail fast.
+- UI/layout entities receive `parentId` from the tightest containing entity.
+- OmniParser normalized boxes are ordered and clamped before pixel conversion.
+- Benchmark box matching is category-aware across OCR, object, and UI boxes.
+- MCP clipboard, auto-mode, specialist mode-policy, and output-bound
+  documentation now matches the implemented behavior.
 
 ## [0.1.0] - 2026-07-29
 
@@ -102,8 +85,7 @@ Initial release.
   VLM only runs in `advanced`/`full` for cost control.
 - **Free-first providers (Gemini):** OCR, object detection (with bounding
   boxes), semantic relationships, and reasoning via Google Gemini free tier.
-- **Paid provider alternatives:** Google Cloud Vision (OCR + detection),
-  Anthropic Claude (VLM).
+- **Cloud provider:** Gemini for OCR, detection, and VLM analysis.
 - **Local providers:** rule-based UI element detection (no API cost),
   mock providers for zero-config testing.
 - Image classifier (rule-based) for `real_world` / `screen_ui` / `document` /
@@ -119,7 +101,7 @@ Initial release.
 - Security: SSRF protection for URL inputs, magic-byte image validation,
   image resizing to reduce cost.
 - SDK + optional server dual entry points.
-- 37 unit/integration tests.
+- 68 unit/integration tests.
 
 ### Known limitations
 - Provider response parsing is tested with fixtures, not live API calls.

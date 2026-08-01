@@ -109,10 +109,12 @@ export async function analyzeMultiRegion(
   if (cols * rows <= 1) return base; // not worth tiling
 
   const tiles = await makeTiles(image, cols, rows);
+  context.signal?.throwIfAborted();
 
   // Analyze tiles in parallel (key pool handles rate limits/rotation).
   const tileResults = await Promise.all(
     tiles.map(async (tile) => {
+      context.signal?.throwIfAborted();
       try {
         const raw = await callGemini({
           keyPool,
@@ -121,6 +123,7 @@ export async function analyzeMultiRegion(
           imageBase64: tile.buffer.toString('base64'),
           timeoutMs,
           jsonOutput: true,
+          context,
         });
         return { tile, data: JSON.parse(stripFences(raw)) as Record<string, unknown> };
       } catch {
@@ -167,6 +170,7 @@ export async function analyzeMultiRegion(
     code: base.code,
     regions: base.regions,
     layout: base.layout,
+    warnings: base.warnings,
     textBlocks: dedupeText(textBlocks),
     objects: dedupeObjects(objects),
   };

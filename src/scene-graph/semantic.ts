@@ -6,17 +6,32 @@
  * entity IDs and use the fixed relation taxonomy.
  */
 
+import { z } from 'zod';
+
 import {
   allowedSemanticRelations,
   type Entity,
   type ImageType,
   type SemanticRelationEdge,
+  type RequestContext,
 } from '../core/types.js';
 
 /** A VLM client that can answer a prompt about an image, returning text. */
 export interface VLMClient {
-  askJson(image: Buffer, prompt: string, maxTokens?: number): Promise<string>;
+  askJson(
+    image: Buffer,
+    prompt: string,
+    maxTokens?: number,
+    context?: RequestContext,
+  ): Promise<string>;
 }
+
+const semanticEdgesSchema = z.array(z.object({
+  subject_id: z.string().min(1),
+  relation: z.string().min(1),
+  object_id: z.string().min(1),
+  confidence: z.number().finite().optional().default(0.7),
+}));
 
 export class SemanticGraphBuilder {
   constructor(private vlm: VLMClient | null) {}
@@ -25,15 +40,18 @@ export class SemanticGraphBuilder {
     image: Buffer,
     entities: Entity[],
     imageType: ImageType = 'mixed',
+    context?: RequestContext,
   ): Promise<SemanticRelationEdge[]> {
     if (!this.vlm || entities.length < 2) return [];
+    context?.signal?.throwIfAborted();
 
     const allowed = allowedSemanticRelations(imageType);
     const prompt = this.buildPrompt(entities, allowed, imageType);
     let raw: string;
     try {
-      raw = await this.vlm.askJson(image, prompt);
-    } catch {
+      raw = await this.vlm.askJson(image, prompt, undefined, context);
+    } catch (error) {
+      if (context?.signal?.aborted) throw error;
       return [];
     }
     return this.parseEdges(raw, entities, allowed);
@@ -87,21 +105,18 @@ export class SemanticGraphBuilder {
     const validIds = new Set(entities.map((e) => e.entityId));
     const text = this.stripFences(raw);
 
-    let data: unknown;
+    let data: z.infer<typeof semanticEdgesSchema>;
     try {
-      data = JSON.parse(text);
+      data = semanticEdgesSchema.parse(JSON.parse(text));
     } catch {
       return [];
     }
-    if (!Array.isArray(data)) return [];
 
     const edges: SemanticRelationEdge[] = [];
     for (const item of data) {
-      if (typeof item !== 'object' || item === null) continue;
-      const rec = item as Record<string, unknown>;
-      const subjectId = rec.subject_id as string;
-      const relation = rec.relation as string;
-      const objectId = rec.object_id as string;
+      const subjectId = item.subject_id;
+      const relation = item.relation;
+      const objectId = item.object_id;
 
       if (!validIds.has(subjectId) || !validIds.has(objectId)) continue;
       if (!allowed.has(relation)) continue;
@@ -111,7 +126,7 @@ export class SemanticGraphBuilder {
         subjectId,
         relation,
         objectId,
-        confidence: Number(rec.confidence ?? 0.7),
+        confidence: Math.min(1, Math.max(0, item.confidence)),
       });
     }
     return edges;

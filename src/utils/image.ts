@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import ipaddr from 'ipaddr.js';
 import sharp from 'sharp';
 
 import { ValidationError } from '../core/errors.js';
@@ -33,6 +33,8 @@ export class ImageProcessor {
     private maxSizeMb = 10,
     private maxDimension = 2048,
     private jpegQuality = 85,
+    private maxPixels = 40_000_000,
+    private fetchTimeoutMs = 15_000,
   ) {}
 
   private get maxSizeBytes(): number {
@@ -40,7 +42,8 @@ export class ImageProcessor {
   }
 
   /** Load raw image bytes from any supported source. */
-  async load(source: ImageInput): Promise<Buffer> {
+  async load(source: ImageInput, signal?: AbortSignal): Promise<Buffer> {
+    signal?.throwIfAborted();
     let data: Buffer;
 
     if (Buffer.isBuffer(source)) {
@@ -51,7 +54,7 @@ export class ImageProcessor {
       if (source.startsWith('data:image/')) {
         data = this.fromBase64(source);
       } else if (source.startsWith('http://') || source.startsWith('https://')) {
-        data = await this.fromUrl(source);
+        data = await this.fromUrl(source, signal);
       } else {
         data = await this.fromPath(source);
       }
@@ -65,13 +68,18 @@ export class ImageProcessor {
   }
 
   /** Resize (if needed) and re-encode. Preserves PNG if image has alpha channel. */
-  async preprocess(data: Buffer): Promise<PreprocessResult> {
-    let image = sharp(data, { failOn: 'none' });
+  async preprocess(data: Buffer, signal?: AbortSignal): Promise<PreprocessResult> {
+    signal?.throwIfAborted();
+    let image = sharp(data, { failOn: 'none', limitInputPixels: this.maxPixels });
     const meta = await image.metadata();
 
     if (!meta.width || !meta.height) {
       throw new ValidationError('Unable to read image dimensions');
     }
+    if (meta.width * meta.height > this.maxPixels) {
+      throw new ValidationError(`Image pixel count exceeds maximum ${this.maxPixels}`);
+    }
+    signal?.throwIfAborted();
 
     if (meta.width > this.maxDimension || meta.height > this.maxDimension) {
       image = image.resize(this.maxDimension, this.maxDimension, {
@@ -104,7 +112,7 @@ export class ImageProcessor {
     if (path.includes('..')) {
       throw new ValidationError('Path traversal detected: ".." not allowed in file paths');
     }
-    
+
     try {
       return await readFile(path);
     } catch (err) {
@@ -113,26 +121,76 @@ export class ImageProcessor {
   }
 
   private fromBase64(dataUri: string): Buffer {
-    const match = dataUri.match(/^data:image\/[a-zA-Z]+;base64,(.+)$/);
+    const match = dataUri.match(/^data:image\/(?:jpeg|png|gif|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
     if (!match || !match[1]) {
       throw new ValidationError('Invalid base64 image data URI');
     }
-    return Buffer.from(match[1], 'base64');
+    const encoded = match[1];
+    if (encoded.length % 4 !== 0 || encoded.length > Math.ceil(this.maxSizeBytes / 3) * 4 + 4) {
+      throw new ValidationError('Invalid or oversized base64 image data URI');
+    }
+    const decoded = Buffer.from(encoded, 'base64');
+    if (decoded.toString('base64') !== encoded) {
+      throw new ValidationError('Invalid base64 image data URI');
+    }
+    return decoded;
   }
 
-  private async fromUrl(url: string): Promise<Buffer> {
+  private async fromUrl(url: string, signal?: AbortSignal): Promise<Buffer> {
     await this.assertUrlSafe(url);
 
-    const response = await fetch(url, { redirect: 'error' });
+    const timeout = AbortSignal.timeout(this.fetchTimeoutMs);
+    const response = await fetch(url, {
+      redirect: 'error',
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    }).catch((error: unknown) => {
+      if (signal?.aborted) throw signal.reason;
+      throw new ValidationError(`Failed to fetch image from URL: ${(error as Error).message}`);
+    });
     if (!response.ok) {
       throw new ValidationError(`Failed to fetch image from URL: HTTP ${response.status}`);
     }
-    const arrayBuffer = await response.arrayBuffer();
-    const data = Buffer.from(arrayBuffer);
-    if (data.length > this.maxSizeBytes) {
-      throw new ValidationError('Image from URL exceeds size limit');
+
+    const contentLength = response.headers.get('content-length');
+    if (contentLength) {
+      const bytes = Number(contentLength);
+      if (Number.isFinite(bytes) && bytes > this.maxSizeBytes) {
+        throw new ValidationError('Image from URL exceeds size limit');
+      }
     }
+
+    const data = await this.readResponseWithLimit(response);
     return data;
+  }
+
+  private async readResponseWithLimit(response: Response): Promise<Buffer> {
+    if (!response.body) {
+      const data = Buffer.from(await response.arrayBuffer());
+      if (data.length > this.maxSizeBytes) {
+        throw new ValidationError('Image from URL exceeds size limit');
+      }
+      return data;
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        total += value.byteLength;
+        if (total > this.maxSizeBytes) {
+          throw new ValidationError('Image from URL exceeds size limit');
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
   }
 
   // ------------------------------------------------------------- validation
@@ -164,23 +222,28 @@ export class ImageProcessor {
     let protocol: string;
     try {
       const parsed = new URL(url);
-      hostname = parsed.hostname;
+      hostname = parsed.hostname.replace(/^\[|\]$/g, '');
       protocol = parsed.protocol;
+      if (parsed.username || parsed.password) {
+        throw new ValidationError('URL credentials are not allowed');
+      }
+      if (parsed.port) {
+        throw new ValidationError('Explicit URL ports are not allowed');
+      }
     } catch {
       throw new ValidationError('Invalid URL');
     }
-    
+
     // Only allow http/https
     if (protocol !== 'http:' && protocol !== 'https:') {
       throw new ValidationError(`Unsupported URL protocol: ${protocol}. Only http and https are allowed.`);
     }
-    
+
     if (!hostname) throw new ValidationError('Invalid URL: no hostname');
 
     // If hostname is already an IP, check it directly
-    const direct = isIP(hostname);
     const addresses: string[] = [];
-    if (direct) {
+    if (ipaddr.isValid(hostname)) {
       addresses.push(hostname);
     } else {
       try {
@@ -199,26 +262,15 @@ export class ImageProcessor {
   }
 
   private isBlockedIp(ip: string): boolean {
-    // IPv6 loopback / link-local / unique-local
-    if (ip.includes(':')) {
-      const low = ip.toLowerCase();
-      return (
-        low === '::1' ||
-        low.startsWith('fe80') ||
-        low.startsWith('fc') ||
-        low.startsWith('fd')
-      );
+    try {
+      let address = ipaddr.parse(ip);
+      if (address.kind() === 'ipv6') {
+        const ipv6 = address as ipaddr.IPv6;
+        if (ipv6.isIPv4MappedAddress()) address = ipv6.toIPv4Address();
+      }
+      return address.range() !== 'unicast';
+    } catch {
+      return true;
     }
-    const parts = ip.split('.').map(Number);
-    if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) return true;
-    const [a, b] = parts as [number, number, number, number];
-    if (a === 10) return true; // 10.0.0.0/8
-    if (a === 127) return true; // loopback
-    if (a === 0) return true; // 0.0.0.0/8
-    if (a === 169 && b === 254) return true; // link-local
-    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
-    if (a === 192 && b === 168) return true; // 192.168.0.0/16
-    if (a >= 224) return true; // multicast / reserved
-    return false;
   }
 }

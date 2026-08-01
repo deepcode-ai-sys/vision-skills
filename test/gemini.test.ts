@@ -12,6 +12,15 @@ describe('Gemini box conversion', () => {
   it('handles empty box', () => {
     expect(geminiBoxToPixels([], 1000, 800)).toEqual([0, 0, 0, 0]);
   });
+
+  it('clamps out-of-range and non-finite box values', () => {
+    expect(geminiBoxToPixels([-100, Number.NaN, 1200, 2000], 1000, 800)).toEqual([
+      0,
+      0,
+      1000,
+      800,
+    ]);
+  });
 });
 
 describe('stripFences', () => {
@@ -68,6 +77,44 @@ describe('parseCombined (OCR + detection in one response)', () => {
     });
     const result = parseCombined(raw, 100, 100);
     expect(result.objects[0]!.confidence).toBe(0.85);
+  });
+
+  it('clamps invalid confidence and orders reversed boxes', () => {
+    const raw = JSON.stringify({
+      text_blocks: [],
+      objects: [{ label: 'dog', box_2d: [900, 800, 100, 200], confidence: 12 }],
+    });
+    const object = parseCombined(raw, 1000, 500).objects[0]!;
+    expect(object.confidence).toBe(1);
+    expect(object.bbox).toEqual([200, 50, 800, 450]);
+  });
+
+  it('rejects malformed combined output instead of partially trusting it', () => {
+    const raw = JSON.stringify({
+      text_blocks: [{ text: 'valid-looking', box_2d: ['bad', 0, 10, 10] }],
+      objects: [],
+    });
+    expect(parseCombined(raw, 100, 100).textBlocks).toEqual([]);
+  });
+
+  it('preserves valid OCR and objects when optional fields and individual items are malformed', () => {
+    const result = parseCombined(JSON.stringify({
+      text_blocks: [
+        { text: 'valid', box_2d: [0, 0, 100, 100] },
+        { text: 'bad', box_2d: ['x', 0, 10, 10] },
+      ],
+      objects: [
+        { label: 'person', box_2d: [0, 0, 200, 200], confidence: 0.7 },
+        { label: 'bad', box_2d: null },
+      ],
+      tables: 'malformed', layout: { lighting: { brightness: 'bright' } },
+    }), 1000, 500);
+    expect(result.textBlocks.map((item) => item.text)).toEqual(['valid']);
+    expect(result.objects.map((item) => item.label)).toEqual(['person']);
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining('text_blocks[1]'), expect.stringContaining('objects[1]'),
+      expect.stringContaining('tables'), expect.stringContaining('layout'),
+    ]));
   });
 
   it('tolerates missing arrays', () => {
