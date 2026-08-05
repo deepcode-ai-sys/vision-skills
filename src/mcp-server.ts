@@ -12,7 +12,7 @@ import type { VisionSkillsConfig } from './config.js';
 import { REQUESTED_MODES, type RequestedMode } from './core/types.js';
 import { boundOutput, boundedLegacyText } from './utils/output.js';
 
-const DEFAULT_MAX_OUTPUT_CHARS = 200_000;
+const DEFAULT_MAX_OUTPUT_CHARS = 2_000_000;
 const DEFAULT_MAX_CLIPBOARD_BYTES = 10 * 1024 * 1024;
 const imageSchema = z.string().min(1).max(15_000_000).describe('Image path, URL, base64, or image data URI');
 const modeSchema = z.enum(REQUESTED_MODES).optional();
