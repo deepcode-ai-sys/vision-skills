@@ -18,7 +18,7 @@ npm run benchmark:mock
 npm run test:package
 ```
 
-CI runs these checks on Node 20.18, 22, and 24. Tests and the mock benchmark must not require live provider credentials.
+CI runs these checks on Node 20.18, 22, and 24. Tests and the mock benchmark must not require live provider credentials. Refresh the committed benchmark chart with `npm run chart:benchmark` when benchmark output changes.
 
 ## Project Structure
 

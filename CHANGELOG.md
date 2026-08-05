@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   distinguishes aggregate request confidence, request/provider/cache
   provenance, and Gemini call/token telemetry.
 - **Deterministic mock benchmark.** Reports CER, WER, IoU box metrics, calls,
-  and p50/p95 harness latency from committed canonical fixture data.
+  and p50/p95 harness latency from committed canonical fixture data, rendered
+  as a committed SVG chart in the README.
   It validates metric plumbing only and does not measure live provider accuracy.
 - **Rich structured analysis.** Added text color/emphasis metadata, code
   context, tables, regions, layout/lighting/color, and opt-in tiled `deep`

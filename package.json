@@ -34,12 +34,15 @@
     "setup-integrations.sh",
     "scripts/add-json-mcp.mjs",
     "scripts/check-node-version.mjs",
+    "scripts/render-benchmark-chart.mjs",
     "benchmark/README.md",
     "benchmark/run.mjs",
     "benchmark/manifest.json",
     "benchmark/manifest.schema.json",
+    "benchmark/benchmark-chart.svg",
     "benchmark/fixtures",
-    "benchmark/expected"
+    "benchmark/expected",
+    "docs/architecture.svg"
   ],
   "scripts": {
     "build": "tsc",
@@ -50,6 +53,7 @@
     "typecheck": "tsc --noEmit",
     "benchmark": "npm run benchmark:mock",
     "benchmark:mock": "npm run build && node benchmark/run.mjs mock",
+    "chart:benchmark": "npm run benchmark:mock && node scripts/render-benchmark-chart.mjs",
     "test:package": "node scripts/package-smoke.mjs",
     "serve": "node dist/server/start.js"
   },

@@ -4,11 +4,47 @@
 ![License](https://img.shields.io/github/license/deepcode-ai-sys/vision-skills)
 ![Node](https://img.shields.io/badge/node-%3E%3D20.18-green)
 
-`vision-skills` converts images into structured JSON for LLMs and agents. The package provides an SDK, CLI, hardened optional REST adapter, an MCP server built on the official Model Context Protocol SDK, and a background daemon with login autostart. Gemini is the built-in general provider for OCR, detection, and combined structured extraction.
+**Turn images into structured JSON for LLMs and agents.** Vision Skills is a fast, dependency-light analysis pipeline — SDK, MCP server, hardened REST adapter, CLI, and background daemon — powered by the Gemini free tier. Point it at a screenshot, document, or photo and get clean entities, bounding boxes, scene graphs, tables, and reasoning instead of raw pixels.
+
+## Features
+
+- **Structured output, not prose** — unified JSON schema v3.1.0: entities with bounding boxes, regions, tables, code context, layout, scene graphs, and knowledge graph.
+- **Enforced mode policies** — `basic` → `full` control exactly which providers and passes run, so cost stays predictable.
+- **Free-first** — Gemini OCR, detection, and VLM analysis with multi-key rotation for free-tier limits. Local rule-based UI detection costs nothing.
+- **Deep analysis** — optional tiled passes for dense images with small text; a fable-style reasoner in `full` mode.
+- **MCP + REST + CLI + daemon** — consume the same pipeline from Claude clients, HTTP, a terminal, or a background service with login autostart.
+- **Hardened by default** — SSRF guards, URL pinning caveats documented, bounded output, auth-gated remote access, and an injectable cache.
+
+## Architecture
+
+![Pipeline](docs/architecture.svg)
+
+1. **Input** — file path, HTTP(S) URL, data URI, or buffer.
+2. **Preprocess** — decode, validate magic bytes, resize, hash.
+3. **Classify + Route** — local image heuristics pick a mode policy.
+4. **Cache** — TTL backend, injectable for Redis-style stores.
+5. **Providers** — mode-gated Gemini OCR/detection, local UI rules, VLM semantics + reasoner.
+6. **Normalize → Scene Graph → Compose** — unified entities, spatial/semantic relations, confidence/provenance/telemetry.
+7. **Output** — JSON v3.1.0 over SDK, MCP, REST, or CLI.
+
+## Table of Contents
+
+- [Quick Setup](#quick-setup)
+- [SDK](#sdk)
+- [Mode Policies](#mode-policies)
+- [Output Semantics](#output-semantics)
+- [Injectable Cache](#injectable-cache)
+- [MCP Server](#mcp-server)
+- [CLI and Daemon](#cli-and-daemon)
+- [REST Server](#rest-server)
+- [Image Security and Limits](#image-security-and-limits)
+- [Benchmark](#benchmark)
+- [Production Audit Status](#production-audit-status)
+- [Development](#development)
 
 ## Quick Setup
 
-Clone the repository, then run the platform setup script from any working directory. It validates Node.js >=20.18, installs dependencies from the local lockfile/package, builds the project locally, and configures supported clients to run the clone's absolute `dist/mcp-server.js` with Node.
+Clone the repository, then run the platform setup script from any working directory. It validates Node.js >=20.18, installs dependencies from the local lockfile, builds the project locally, and configures supported clients to run the clone's absolute `dist/mcp-server.js` with Node.
 
 Windows (primary setup path):
 
@@ -222,10 +258,14 @@ Local SDK paths reject `..` but are not confined to an application root. Treat l
 ## Benchmark
 
 ```bash
-npm run benchmark:mock
+npm run chart:benchmark
 ```
 
-The mock profile is a deterministic pipeline smoke check. It generates an image and invokes the public SDK through the built-in mock providers before deriving metrics from the actual result. Box matching is category-aware (`ocr`, `object`, or `ui`), so overlapping boxes from different categories cannot match. Perfect scores validate this plumbing only; they do not measure Gemini or real-image accuracy.
+The mock profile is a deterministic end-to-end smoke test of the pipeline: it generates an image, runs it through the built-in mock providers, and derives CER/WER, category-aware box F1, call counts, and p50/p95 latency. The SVG chart is committed from `benchmark/results/mock.json`:
+
+![Mock benchmark](benchmark/benchmark-chart.svg)
+
+Mock providers are deterministic, so perfect accuracy values validate plumbing only — they do not measure Gemini or real-image accuracy. Box matching is category-aware (`ocr`, `object`, or `ui`), so overlapping boxes from different categories cannot match.
 
 No generic local/live benchmark runners are included because the package cannot supply representative external services, credentials, or independently prepared expected data. Add a project-specific runner with recorded provider/model versions, warmup policy, and repeated latency measurements before making a live accuracy claim.
 
@@ -245,7 +285,7 @@ npm run typecheck
 npm run lint
 npm run build
 npm test
-npm run benchmark:mock
+npm run chart:benchmark
 npm run test:package
 ```
 

@@ -1,6 +1,6 @@
 # Benchmark
 
-`npm run benchmark:mock` is a deterministic end-to-end smoke test of benchmark and package plumbing. It builds the package, generates a small image from fixture metadata, runs the public `VisionSkills` pipeline through the built-in mock providers, then derives OCR and box metrics from the actual response. It writes ignored output to `benchmark/results/mock.json`.
+`npm run benchmark:mock` is a deterministic end-to-end smoke test of benchmark and package plumbing. It builds the package, generates a small image from fixture metadata, runs the public `VisionSkills` pipeline through the built-in mock providers, then derives OCR and box metrics from the actual response. It writes ignored output to `benchmark/results/mock.json`. `npm run chart:benchmark` additionally renders `benchmark/benchmark-chart.svg` from that JSON for the README.
 
 Reported metrics are character error rate (CER), word error rate (WER), category-aware maximum-cardinality IoU box precision/recall/F1, and p50/p95 pipeline latency. Expected and predicted boxes are labeled `ocr`, `object`, or `ui` and can match only within the same category. The mock providers are deterministic, so perfect accuracy values validate plumbing and do not measure any provider or model. The latency is local pipeline overhead, not inference latency.
 
