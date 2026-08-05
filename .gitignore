@@ -6,3 +6,8 @@ dist
 coverage
 *.tsbuildinfo
 benchmark/results/
+
+# Local client MCP configs written by setup-integrations (contain API keys)
+.vscode/
+.continue/
+
