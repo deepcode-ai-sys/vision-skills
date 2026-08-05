@@ -8,15 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **Explicit specialist routing.** Opt-in OCR, object, UI, table, region,
-  layout, and code providers can augment or replace capabilities through
-  explicit ordered fallback chains. Strict codecs cover `canonical-v1`,
-  PaddleOCR classic, Docling JSON, OmniParser v2, and OpenAI-compatible local
-  multimodal chat completions. Models and provider services are not bundled.
-- **Specialist observability.** Responses include route traces and operational
-  usage metrics when specialists are configured: attempted and selected
-  providers, grouped call counts, per-provider counts, latency, and failures.
-  Missing specialist confidence is preserved as `null` rather than fabricated.
 - **Official MCP server.** The MCP adapter now uses the official Model Context
   Protocol SDK with registered tools, structured content, standards-compliant
   errors, bounded output/truncation metadata, cancellation, and progress
@@ -29,9 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `CacheBackend` contract; the in-memory TTL backend remains the default.
 - **Response confidence, provenance, and telemetry.** Top-level output now
   distinguishes aggregate request confidence, request/provider/cache
-  provenance, Gemini call/token telemetry, and specialist route usage.
-- **Deterministic mock benchmark.** Reports CER, WER, IoU box metrics, routing,
-  calls, and p50/p95 harness latency from committed canonical fixture data.
+  provenance, and Gemini call/token telemetry.
+- **Deterministic mock benchmark.** Reports CER, WER, IoU box metrics, calls,
+  and p50/p95 harness latency from committed canonical fixture data.
   It validates metric plumbing only and does not measure live provider accuracy.
 - **Rich structured analysis.** Added text color/emphasis metadata, code
   context, tables, regions, layout/lighting/color, and opt-in tiled `deep`
@@ -53,9 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Gemini per-attempt timeout and overall orchestration budget are separated so
   key fallback can proceed after a timed-out attempt.
 - Public final bounding boxes serialize as `{ x1, y1, x2, y2 }` pixel objects.
-  Array boxes remain the plugin and specialist canonical integration format.
+  Array boxes remain the built-in plugin integration format.
 - Documentation now describes Gemini as the built-in general provider rather
-  than the only provider, and records specialist, REST, URL-input, benchmark,
+  than the only provider, and records REST, URL-input, benchmark,
   and production-audit limitations without claiming production readiness.
 
 ### Fixed
@@ -71,10 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Transient Gemini failures use retry/backoff while non-retryable client errors
   fail fast.
 - UI/layout entities receive `parentId` from the tightest containing entity.
-- OmniParser normalized boxes are ordered and clamped before pixel conversion.
 - Benchmark box matching is category-aware across OCR, object, and UI boxes.
-- MCP clipboard, auto-mode, specialist mode-policy, and output-bound
-  documentation now matches the implemented behavior.
+- MCP clipboard, auto-mode, and output-bound documentation now matches the
+  implemented behavior.
 
 ## [0.1.0] - 2026-07-29
 

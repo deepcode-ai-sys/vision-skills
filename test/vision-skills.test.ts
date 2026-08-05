@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { VisionSkills } from '../src/vision-skills.js';
 import { ConfigurationError } from '../src/core/errors.js';
 import { BoundingBox } from '../src/core/types.js';
-import { CacheManager, type CacheBackend } from '../src/cache/cache.js';
+import type { CacheBackend } from '../src/cache/cache.js';
 
 class TestCacheBackend implements CacheBackend {
   values = new Map<string, string>();
@@ -64,23 +64,6 @@ describe('BoundingBox', () => {
 });
 
 describe('VisionSkills (mock providers)', () => {
-  it('canonicalizes complete nested cache identity while isolating specialist backends', () => {
-    const left = CacheManager.makeKey('image', 'standard', {
-      specialists: { routes: { ocr: { mode: 'augment', providers: ['p'] } }, providers: [{ endpoint: 'http://a', id: 'p', model: 'm1' }] },
-    });
-    const reordered = CacheManager.makeKey('image', 'standard', {
-      specialists: { providers: [{ model: 'm1', id: 'p', endpoint: 'http://a' }], routes: { ocr: { providers: ['p'], mode: 'augment' } } },
-    });
-    expect(reordered).toBe(left);
-    for (const specialists of [
-      { providers: [{ endpoint: 'http://b', id: 'p', model: 'm1' }], routes: { ocr: { providers: ['p'], mode: 'augment' } } },
-      { providers: [{ endpoint: 'http://a', id: 'other', model: 'm1' }], routes: { ocr: { providers: ['other'], mode: 'augment' } } },
-      { providers: [{ endpoint: 'http://a', id: 'p', model: 'm2' }], routes: { ocr: { providers: ['p'], mode: 'augment' } } },
-      { providers: [{ endpoint: 'http://a', id: 'p', model: 'm1' }], routes: { objects: { providers: ['p'], mode: 'augment' } } },
-      { providers: [{ endpoint: 'http://a', id: 'p', model: 'm1' }], routes: { ocr: { providers: ['p'], mode: 'replace' } } },
-    ]) expect(CacheManager.makeKey('image', 'standard', { specialists })).not.toBe(left);
-  });
-
   it('fails fast without a real OCR provider unless mock mode is explicit', () => {
     vi.stubEnv('GEMINI_API_KEY', '');
     vi.stubEnv('GEMINI_API_KEYS', '');
@@ -101,8 +84,6 @@ describe('VisionSkills (mock providers)', () => {
     expect(result.entities.length).toBeGreaterThan(0);
     expect(result.providerResults.length).toBeGreaterThan(0);
     expect(result.latencyMsTotal).toBeGreaterThan(0);
-    expect(result.route).toBeUndefined();
-    expect(result.usage).toBeUndefined();
   });
 
   it('basic mode runs OCR only', async () => {
@@ -202,62 +183,6 @@ describe('VisionSkills (mock providers)', () => {
       costActualTotal: first.costActualTotal,
       providers: first.provenance.providers,
     });
-  });
-
-  it('uses a short TTL for specialist OCR content', async () => {
-    const backend = new TestCacheBackend();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      protocol: 'canonical-v1', text: [{ text: 'private', bbox: [0, 0, 10, 10], confidence: 0.8 }],
-      objects: [], ui: [], tables: [], regions: [], layout: null, code: null,
-    }), { status: 200 })));
-    try {
-      const vision = new VisionSkills({ useMockProviders: true, cacheBackend: backend, cacheTtlSeconds: 3600,
-        specialists: { providers: [{ id: 'doc', protocol: 'canonical-v1', endpoint: 'http://localhost', capabilities: ['ocr'] }],
-          routes: { ocr: { providers: ['doc'], mode: 'augment' } } } });
-      await vision.analyze(await makeImage(), { mode: 'basic' });
-      expect(backend.ttls).toEqual([300]);
-    } finally { vi.unstubAllGlobals(); }
-  });
-
-  it('uses a short TTL for specialist table and code document content', async () => {
-    for (const capability of ['tables', 'code'] as const) {
-      const backend = new TestCacheBackend();
-      const canonical = {
-        protocol: 'canonical-v1', text: [], objects: [], ui: [], regions: [], layout: null,
-        tables: capability === 'tables' ? [{ title: 'private', columns: ['A'], rows: [['B']] }] : [],
-        code: capability === 'code' ? { language: 'txt', functions: [], errors: [], snippet: 'private' } : null,
-      };
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(canonical), { status: 200 })));
-      const vision = new VisionSkills({ useMockProviders: true, cacheBackend: backend, cacheTtlSeconds: 3600,
-        specialists: { providers: [{ id: capability, protocol: 'canonical-v1', endpoint: 'http://localhost', capabilities: [capability] }],
-          routes: { [capability]: { providers: [capability], mode: 'augment' } } } });
-      await vision.analyze(await makeImage(), { mode: 'standard' });
-      expect(backend.ttls).toEqual([300]);
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it('isolates specialist configurations sharing one cache backend', async () => {
-    const backend = new TestCacheBackend();
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
-      const canonical = {
-        protocol: 'canonical-v1', text: [{ text: String(url).endsWith('/a') ? 'A' : 'B', bbox: [0, 0, 10, 10], confidence: 0.8 }],
-        objects: [], ui: [], tables: [], regions: [], layout: null, code: null,
-      };
-      return new Response(JSON.stringify(canonical), { status: 200 });
-    }));
-    try {
-      const makeVision = (id: string, endpoint: string) => new VisionSkills({ useMockProviders: true, cacheBackend: backend,
-        specialists: { providers: [{ id, protocol: 'canonical-v1', endpoint, capabilities: ['ocr'], model: `model-${id}` }],
-          routes: { ocr: { providers: [id], mode: 'replace' } } } });
-      const image = await makeImage();
-      const a = await makeVision('a', 'http://localhost/a').analyze(image, { mode: 'basic' });
-      const b = await makeVision('b', 'http://localhost/b').analyze(image, { mode: 'basic' });
-      expect(a.entities[0]?.text).toBe('A');
-      expect(b.entities[0]?.text).toBe('B');
-      expect(b.provenance.cacheHit).toBe(false);
-      expect(backend.values.size).toBe(2);
-    } finally { vi.unstubAllGlobals(); }
   });
 
   it('gates combined structured fields in basic mode and reports Gemini usage', async () => {

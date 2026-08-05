@@ -380,10 +380,6 @@ export interface VisionResponse {
   confidence: number;
   provenance: ResponseProvenance;
   telemetry?: RequestTelemetry;
-  /** Explicit specialist routing trace; absent on the unchanged Gemini-only path. */
-  route?: import('../specialists/types.js').SpecialistRouteTrace[];
-  /** Explicit specialist call metrics; absent when specialists are not configured. */
-  usage?: import('../specialists/types.js').SpecialistUsage;
   errors: string[];
   warnings: string[];
 }

@@ -4,9 +4,7 @@
 ![License](https://img.shields.io/github/license/deepcode-ai-sys/vision-skills)
 ![Node](https://img.shields.io/badge/node-%3E%3D20.18-green)
 
-`vision-skills` converts images into structured JSON for LLMs and agents. The package provides an SDK, CLI, hardened optional REST adapter, an MCP server built on the official Model Context Protocol SDK, and a background daemon with login autostart. Gemini is the built-in general provider; explicit HTTP specialist routes can add or replace OCR, object, UI, table, region, layout, and code extraction.
-
-No specialist models are bundled. PaddleOCR, Docling, OmniParser, and OpenAI-compatible local multimodal models run as services that you configure.
+`vision-skills` converts images into structured JSON for LLMs and agents. The package provides an SDK, CLI, hardened optional REST adapter, an MCP server built on the official Model Context Protocol SDK, and a background daemon with login autostart. Gemini is the built-in general provider for OCR, detection, and combined structured extraction.
 
 ## Quick Setup
 
@@ -31,7 +29,7 @@ Restart the configured client afterward. Keep the clone in place because client 
 Requirements:
 
 - Node.js >=20.18
-- A Gemini API key for the built-in OCR/detection path, an explicit specialist OCR replacement, or `useMockProviders: true` for tests
+- A Gemini API key for the built-in OCR/detection path, or `useMockProviders: true` for tests
 - Fastify 5 (`^5.11.0`) only when using `vision-skills/server` (optional peer dependency)
 
 Set one Gemini key or a comma-separated key pool:
@@ -80,9 +78,7 @@ Modes are enforced policies, not quality labels:
 | `advanced` | OCR, object detection, UI detection | Yes | Yes | No |
 | `full` | OCR, object detection, UI detection | Yes | Yes | Yes |
 
-Combined structured fields are tables, regions, layout/lighting/color, and code context made available by the built-in combined analysis pass or configured specialists. A field can still be empty when a provider does not detect or support it.
-
-These policies also govern configured specialist routes. `basic` runs only OCR routes; `standard`, `advanced`, and `full` may run OCR, object, UI, table, region, layout, and code routes. Provider declarations and routes remain explicit, but a route outside the selected mode policy is not called.
+Combined structured fields are tables, regions, layout/lighting/color, and code context made available by the built-in combined analysis pass. A field can still be empty when a provider does not detect or support it.
 
 The SDK's `defaultMode` is truly `auto`, not an alias for `standard`. Auto routing uses local image heuristics:
 
@@ -111,12 +107,12 @@ The full schema is defined in `src/core/types.ts`. A representative entity is se
 }
 ```
 
-Final SDK/REST/MCP entity, table, and region boxes are `BoundingBox` objects serialized as `{ x1, y1, x2, y2 }` in pixels. Plugin payloads and specialist canonical-v1 HTTP payloads use `[x1, y1, x2, y2]` arrays at those integration boundaries.
+Final SDK/REST/MCP entity, table, and region boxes are `BoundingBox` objects serialized as `{ x1, y1, x2, y2 }` in pixels. Plugin payloads use `[x1, y1, x2, y2]` arrays at those integration boundaries.
 
 Confidence has several distinct meanings:
 
-- `entity.confidence` is provider-reported confidence normalized to 0..1. Specialist codecs preserve unavailable confidence as `null`; built-in legacy plugin normalization may use `0` when confidence is absent.
-- Top-level `confidence` is the arithmetic mean of the local classifier confidence and all returned built-in plugin result confidences (failed plugin results generally contribute `0`). It is not a calibrated probability, does not include specialist entity confidence, and must not be interpreted as end-to-end accuracy.
+- `entity.confidence` is provider-reported confidence normalized to 0..1. Built-in legacy plugin normalization may use `0` when confidence is absent.
+- Top-level `confidence` is the arithmetic mean of the local classifier confidence and all returned built-in plugin result confidences (failed plugin results generally contribute `0`). It is not a calibrated probability and must not be interpreted as end-to-end accuracy.
 - `reasonerOutput.reasoningConfidence` is the reasoner's self-reported confidence and is separate from top-level confidence.
 
 Provenance and usage are also separate:
@@ -124,7 +120,6 @@ Provenance and usage are also separate:
 - `provenance` records a per-request ID, requested mode (including `auto`), selection reason, classifier layer, selected provider names, and `cacheHit`.
 - `providerResults` records built-in plugin latency, cost estimate/actual, confidence, warnings, and errors.
 - `telemetry.gemini` records observed Gemini calls and reported input/output/total tokens. Values remain zero when unavailable or unused.
-- `route` and `usage` exist only when specialist routing is configured. They record configured chains, attempts, selected providers, grouped HTTP call counts, per-provider counts, call latency, and failures. They are operational metrics, not billing or accuracy claims.
 - Cached responses get a new request ID and `cacheHit: true`; provider output and original telemetry otherwise come from the cached response.
 
 ## Injectable Cache
@@ -144,109 +139,7 @@ const cacheBackend: CacheBackend = {
 const vision = new VisionSkills({ cacheBackend, cacheTtlSeconds: 900 });
 ```
 
-The backend owns namespace-safe `clear()` behavior. Specialist PII is not independently classified, so operators handling sensitive images should disable caching or enforce an appropriate backend retention policy.
-
-## Specialist Providers
-
-Specialists are opt-in and explicit. Every provider declares a protocol, endpoint, and capabilities; every used capability declares an ordered provider chain and either `augment` or `replace`.
-
-- `augment` retains the built-in result and appends/composes specialist output.
-- `replace` suppresses or removes the built-in output for that capability. An OCR replacement also allows initialization without a Gemini key.
-- Fallback occurs only inside the declared chain. If every provider in any configured route fails, the request fails visibly.
-- Calls to the same provider for multiple routed capabilities are grouped when possible.
-- Configuring a provider alone does nothing; an explicit route is required.
-
-Supported protocols are `canonical-v1`, `paddleocr-classic`, `docling-json`, `omniparser-v2`, and `openai-chat-completions`.
-
-### PaddleOCR
-
-```ts
-const vision = new VisionSkills({
-  specialists: {
-    providers: [{
-      id: 'paddle-local',
-      protocol: 'paddleocr-classic',
-      endpoint: 'http://127.0.0.1:9001/ocr',
-      capabilities: ['ocr'],
-      timeoutMs: 20_000,
-    }],
-    routes: { ocr: { providers: ['paddle-local'], mode: 'replace' } },
-  },
-});
-```
-
-The adapter accepts the documented object and classic tuple JSON forms and converts polygons to pixel `[x1,y1,x2,y2]` canonical boxes.
-
-### Docling
-
-```ts
-const vision = new VisionSkills({
-  geminiApiKey: process.env.GEMINI_API_KEY,
-  specialists: {
-    providers: [{
-      id: 'docling-local',
-      protocol: 'docling-json',
-      endpoint: 'http://127.0.0.1:9002/convert',
-      capabilities: ['ocr', 'tables'],
-    }],
-    routes: {
-      ocr: { providers: ['docling-local'], mode: 'augment' },
-      tables: { providers: ['docling-local'], mode: 'replace' },
-    },
-  },
-});
-```
-
-The endpoint must return the supported `DoclingDocument` JSON shape. The package does not launch Docling or convert arbitrary Docling API responses automatically.
-
-### OmniParser
-
-```ts
-const vision = new VisionSkills({
-  geminiApiKey: process.env.GEMINI_API_KEY,
-  specialists: {
-    providers: [{
-      id: 'omniparser-local',
-      protocol: 'omniparser-v2',
-      endpoint: 'http://127.0.0.1:9003/parse',
-      capabilities: ['ui'],
-    }],
-    routes: { ui: { providers: ['omniparser-local'], mode: 'replace' } },
-  },
-});
-```
-
-### OpenAI-Compatible Local VLM
-
-```ts
-const vision = new VisionSkills({
-  specialists: {
-    providers: [{
-      id: 'local-vlm',
-      protocol: 'openai-chat-completions',
-      endpoint: 'http://127.0.0.1:8000/v1/chat/completions',
-      model: 'Qwen2.5-VL',
-      apiKey: process.env.LOCAL_VLM_API_KEY,
-      capabilities: ['ocr', 'objects', 'ui', 'tables', 'regions', 'layout', 'code'],
-      timeoutMs: 60_000,
-      maxResponseBytes: 5_000_000,
-    }],
-    routes: {
-      ocr: { providers: ['local-vlm'], mode: 'replace' },
-      objects: { providers: ['local-vlm'], mode: 'replace' },
-      ui: { providers: ['local-vlm'], mode: 'replace' },
-      tables: { providers: ['local-vlm'], mode: 'replace' },
-      regions: { providers: ['local-vlm'], mode: 'replace' },
-      layout: { providers: ['local-vlm'], mode: 'replace' },
-      code: { providers: ['local-vlm'], mode: 'replace' },
-    },
-  },
-});
-```
-
-The OpenAI-compatible endpoint must support chat completions with image data URLs and return strict canonical-v1 JSON in `choices[0].message.content`. Compatibility with a text API alone is insufficient.
-
-Specialist endpoints are trusted operator configuration. Localhost is intentionally allowed, redirects are disabled, timeouts/cancellation and response byte limits are enforced, response schemas are validated, and auth headers can be supplied. The specialist transport does not apply the image-input SSRF policy to configured endpoints; use HTTPS, authentication, and network policy for non-local services.
+The backend owns namespace-safe `clear()` behavior. Operators handling sensitive images should disable caching or enforce an appropriate backend retention policy.
 
 ## MCP Server
 
@@ -332,7 +225,7 @@ Local SDK paths reject `..` but are not confined to an application root. Treat l
 npm run benchmark:mock
 ```
 
-The mock profile is a deterministic pipeline smoke check. It generates an image, starts a loopback canonical-v1 HTTP provider, and invokes the public SDK routing, adapter, composition, and response packaging before deriving metrics from the actual result. Box matching is category-aware (`ocr`, `object`, or `ui`), so overlapping boxes from different categories cannot match. Perfect scores validate this plumbing only; they do not measure Gemini, PaddleOCR, Docling, OmniParser, a local VLM, or real-image accuracy.
+The mock profile is a deterministic pipeline smoke check. It generates an image and invokes the public SDK through the built-in mock providers before deriving metrics from the actual result. Box matching is category-aware (`ocr`, `object`, or `ui`), so overlapping boxes from different categories cannot match. Perfect scores validate this plumbing only; they do not measure Gemini or real-image accuracy.
 
 No generic local/live benchmark runners are included because the package cannot supply representative external services, credentials, or independently prepared expected data. Add a project-specific runner with recorded provider/model versions, warmup policy, and repeated latency measurements before making a live accuracy claim.
 
@@ -340,7 +233,7 @@ See `benchmark/README.md` for metric definitions and profile semantics.
 
 ## Production Audit Status
 
-The current package includes automated tests for schema validation, specialist fallback/composition, MCP protocol behavior, output bounds, URL blocking, REST authentication, CORS preflight, remote path rejection, concurrency, and cancellation/timeouts. CI covers Node 20.18, 22, and 24 and performs type checking, linting, build, tests, the deterministic mock benchmark, and installed-tarball import/binary/benchmark smoke tests.
+The current package includes automated tests for schema validation, MCP protocol behavior, output bounds, URL blocking, REST authentication, CORS preflight, remote path rejection, concurrency, and cancellation/timeouts. CI covers Node 20.18, 22, and 24 and performs type checking, linting, build, tests, the deterministic mock benchmark, and installed-tarball import/binary/benchmark smoke tests.
 
 This is not a claim of full production readiness. There has been no documented independent security audit or penetration test, no committed live-provider accuracy evaluation, and no production SLO/load or failover certification. Before deployment, validate chosen providers and models on representative data, review privacy/retention requirements, constrain egress and URL inputs, use a shared cache deliberately, terminate TLS, add infrastructure rate limits/observability, and test cancellation and failure behavior under load.
 

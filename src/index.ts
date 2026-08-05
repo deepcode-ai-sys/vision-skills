@@ -19,19 +19,6 @@
 export { VisionSkills, type AnalyzeOptions } from './vision-skills.js';
 export { type VisionSkillsConfig, type ResolvedConfig, resolveConfig } from './config.js';
 export { ModeRouter } from './core/router.js';
-export { SpecialistRegistry, SpecialistRouter } from './specialists/router.js';
-export { SpecialistOrchestrator } from './specialists/orchestrator.js';
-export { HttpSpecialistProvider, redactHeaders, type SpecialistProvider } from './specialists/http.js';
-export {
-  CanonicalV1Codec,
-  PaddleOcrClassicCodec,
-  DoclingJsonCodec,
-  OmniParserV2Codec,
-  OpenAiChatCompletionsCodec,
-  createSpecialistCodec,
-  type SpecialistCodec,
-} from './specialists/codecs.js';
-export { composeSpecialists } from './specialists/compose.js';
 export {
   characterErrorRate,
   wordErrorRate,
@@ -42,22 +29,6 @@ export {
   type BoxMetric,
   type LabeledBox,
 } from './benchmark/metrics.js';
-export {
-  SPECIALIST_CAPABILITIES,
-  SPECIALIST_PROTOCOLS,
-  canonicalV1Schema,
-  emptyCanonicalOutput,
-  type SpecialistCapability,
-  type SpecialistProtocol,
-  type SpecialistProviderConfig,
-  type SpecialistRouteConfig,
-  type SpecialistsConfig,
-  type SpecialistCanonicalOutput,
-  type SpecialistRouteTrace,
-  type SpecialistCallMetric,
-  type SpecialistUsage,
-  type SpecialistRunResult,
-} from './specialists/types.js';
 
 // Core types
 export {

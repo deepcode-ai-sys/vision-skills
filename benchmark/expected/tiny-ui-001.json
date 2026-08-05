@@ -1,10 +1,13 @@
 {
-  "protocol": "canonical-v1",
-  "text": [{ "text": "Login", "bbox": [8, 6, 34, 16], "confidence": null }],
-  "objects": [{ "label": "panel", "bbox": [4, 3, 60, 44], "confidence": 0.9 }],
-  "ui": [{ "label": "button", "text": "Submit", "bbox": [12, 28, 48, 40], "confidence": null, "clickable": true }],
-  "tables": [],
-  "regions": [],
-  "layout": null,
-  "code": null
+  "text": [
+    { "text": "Login", "bbox": [120, 340, 180, 370], "confidence": 0.98 },
+    { "text": "Username", "bbox": [100, 200, 200, 230], "confidence": 0.97 }
+  ],
+  "objects": [
+    { "label": "person", "bbox": [120, 340, 240, 580], "confidence": 0.95 },
+    { "label": "vehicle.bicycle", "bbox": [300, 400, 450, 600], "confidence": 0.9 }
+  ],
+  "ui": [
+    { "label": "ui.button", "bbox": [100, 400, 250, 440], "confidence": 0.6, "clickable": true }
+  ]
 }

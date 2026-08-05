@@ -1,6 +1,6 @@
 # Contributing to Vision Skills
 
-Vision Skills turns images into structured JSON through a provider-agnostic pipeline. Gemini is the built-in general provider; local or remote specialists are explicit HTTP integrations rather than bundled models.
+Vision Skills turns images into structured JSON through a provider-agnostic pipeline. Gemini is the built-in general provider; additional providers can be added as plugins rather than bundled models.
 
 ## Development Setup
 
@@ -32,7 +32,6 @@ src/
 |-- reasoner/       full-mode VLM reasoning
 |-- scene-graph/    spatial and semantic relationships
 |-- server/         optional hardened Fastify REST adapter
-|-- specialists/    explicit HTTP routes, codecs, and composition
 `-- utils/          image security/preprocessing and output bounds
 ```
 
@@ -49,11 +48,9 @@ Preserve the enforced mode policies:
 
 SDK `auto` is a real requested mode and must remain distinguishable in provenance. Do not silently map it to `standard`; uncertain classifications may select `standard`, while simple documents may select `basic`.
 
-The mode table governs both the built-in plugin pipeline and explicit specialist routes. `basic` permits only OCR specialists; all declared specialist capabilities are eligible in `standard`, `advanced`, and `full`.
+Final `Entity`, `Table`, and `Region` boxes use `BoundingBox` and serialize as `{ x1, y1, x2, y2 }` pixel objects. Built-in plugin payloads use `[x1, y1, x2, y2]` arrays at their boundaries.
 
-Final `Entity`, `Table`, and `Region` boxes use `BoundingBox` and serialize as `{ x1, y1, x2, y2 }` pixel objects. Built-in plugin payloads and specialist canonical payloads use `[x1, y1, x2, y2]` arrays at their boundaries.
-
-Do not invent confidence. Specialist canonical confidence is `number | null`; unavailable values remain `null`. Top-level request confidence, entity confidence, and reasoner confidence have different semantics and must not be conflated.
+Do not invent confidence. Unavailable confidence values remain `null`. Top-level request confidence, entity confidence, and reasoner confidence have different semantics and must not be conflated.
 
 ## Adding a Built-In Plugin
 
@@ -65,26 +62,13 @@ Do not invent confidence. Specialist canonical confidence is `number | null`; un
 
 See `examples/custom-plugin.ts`. Keep provider-specific parsing out of core routing and normalization.
 
-## Adding a Specialist Protocol
-
-Specialist providers are explicit configured HTTP services. When adding a protocol:
-
-1. Add its exact name and types in `src/specialists/types.ts`.
-2. Implement strict request encoding and response decoding in `src/specialists/codecs.ts`.
-3. Convert output to canonical-v1 semantics without fabricating missing fields or confidence.
-4. Validate malformed, oversized, timed-out, cancelled, redirected, and non-2xx responses.
-5. Add committed fixtures from documented response shapes, not live calls.
-6. Document whether routes augment or replace built-in output and which capabilities are supported.
-
-Provider declarations do not activate routing. Every capability requires an explicit ordered route with `augment` or `replace`. Fallback must remain confined to that chain, and exhausted routes must fail visibly.
-
 ## Documentation and Benchmark Claims
 
 - Do not describe the package as Gemini-only or cloud-only.
-- Do not claim live specialist accuracy from codec fixtures or the deterministic mock benchmark.
+- Do not claim live accuracy from the deterministic mock benchmark.
 - `benchmark:mock` validates metrics/report plumbing using committed canonical data; its perfect values are not model measurements.
 - Local/live results must record runner code, data provenance, provider/model version, endpoint configuration, and environment. Never commit keys or sensitive images.
-- Describe security controls with their limits, including the unpinned-DNS caveat for image URLs and the trusted-configuration boundary for specialist endpoints.
+- Describe security controls with their limits, including the unpinned-DNS caveat for image URLs.
 - Do not claim full production readiness without an independent audit, representative live accuracy evaluation, load testing, and operational evidence.
 
 ## Pull Requests

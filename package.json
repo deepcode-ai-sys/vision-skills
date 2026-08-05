@@ -1,7 +1,7 @@
 {
   "name": "vision-skills",
   "version": "0.1.0",
-  "description": "Structured image analysis for LLMs via SDK, MCP, REST, Gemini, and explicit local or remote specialists.",
+  "description": "Structured image analysis for LLMs via SDK, MCP, REST, and Gemini.",
   "type": "module",
   "bin": {
     "vision-skills": "./dist/cli.js",
@@ -64,11 +64,7 @@
     "scene-graph",
     "computer-vision",
     "gemini",
-    "mcp",
-    "paddleocr",
-    "docling",
-    "omniparser",
-    "local-vlm"
+    "mcp"
   ],
   "author": "",
   "license": "MIT",

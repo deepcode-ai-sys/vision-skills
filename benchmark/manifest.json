@@ -4,7 +4,6 @@
   "cases": [{
     "id": "tiny-ui-001",
     "fixture": "fixtures/mock-input.json",
-    "expected": "expected/tiny-ui-001.json",
-    "capabilities": ["ocr", "objects", "ui"]
+    "expected": "expected/tiny-ui-001.json"
   }]
 }

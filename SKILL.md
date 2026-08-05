@@ -31,15 +31,12 @@ MCP analysis accepts `auto` and fixed modes. Omitting `mode` inherits the config
 
 Choose `basic` for quick text extraction, `standard` for normal screenshots/documents/photos, `advanced` when relationships matter, and `full` only when a reasoned interpretation is needed. Use `depth: deep` for dense or long images with small text; it creates additional tiled provider calls. Otherwise keep `fast`.
 
-Operator-configured specialist routes obey the selected policy: `basic` runs only OCR routes, while `standard`, `advanced`, and `full` may run OCR, object, UI, table, region, layout, and code routes.
-
 ## Reading Results
 
 - Final bounding boxes are pixel objects: `{ x1, y1, x2, y2 }`.
-- `entity.confidence: null` means a specialist did not report confidence; do not invent a score.
-- Top-level `confidence` is an aggregate routing/provider signal, not calibrated end-to-end accuracy.
+- `entity.confidence: null` means the provider did not report confidence; do not invent a score.
+- Top-level `confidence` is an aggregate provider signal, not calibrated end-to-end accuracy.
 - Use `provenance` to identify the requested mode, selection reason, provider names, and cache hits.
-- `route` and `usage` describe explicit specialist routes and HTTP calls only; absence means no specialist route was configured.
 - Treat `errors`, `warnings`, `reasonerOutput.openQuestions`, and output `truncation` as material caveats.
 
 MCP output is wrapped with `truncation` metadata. Read untruncated structured data from `data`. If `truncation.truncated` is true, `json` contains a bounded partial serialization and must not be presented as complete analysis.

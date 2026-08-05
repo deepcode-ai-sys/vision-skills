@@ -8,14 +8,13 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "fixture", "expected", "capabilities"],
+        "required": ["id", "fixture", "expected"],
         "properties": {
           "id": { "type": "string" },
           "fixture": { "type": "string" },
-          "expected": { "type": "string" },
-          "capabilities": { "type": "array", "items": { "type": "string" } }
+          "expected": { "type": "string" }
         },
-        "additionalProperties": false
+          "additionalProperties": false
       }
     }
   },
