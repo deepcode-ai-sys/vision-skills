@@ -1,6 +1,11 @@
 # vision-skills
 
-`vision-skills` converts images into structured JSON for LLMs and agents. The package provides an SDK, CLI, hardened optional REST adapter, and an MCP server built on the official Model Context Protocol SDK. Gemini is the built-in general provider; explicit HTTP specialist routes can add or replace OCR, object, UI, table, region, layout, and code extraction.
+![npm version](https://img.shields.io/npm/v/vision-skills)
+![CI](https://github.com/deepcode-ai-sys/vision-skills/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/github/license/deepcode-ai-sys/vision-skills)
+![Node](https://img.shields.io/badge/node-%3E%3D20.18-green)
+
+`vision-skills` converts images into structured JSON for LLMs and agents. The package provides an SDK, CLI, hardened optional REST adapter, an MCP server built on the official Model Context Protocol SDK, and a background daemon with login autostart. Gemini is the built-in general provider; explicit HTTP specialist routes can add or replace OCR, object, UI, table, region, layout, and code extraction.
 
 No specialist models are bundled. PaddleOCR, Docling, OmniParser, and OpenAI-compatible local multimodal models run as services that you configure.
 
@@ -266,6 +271,22 @@ The server uses `@modelcontextprotocol/sdk`, stdio transport, registered tools, 
 Analysis forwards MCP cancellation to image/provider work and emits progress notifications when the client supplies a progress token. Analysis and health output defaults to a 200,000-character serialized-payload bound (`maxOutputChars`) and includes a fixed numeric `truncation` metadata envelope: untruncated output is under `data`; truncated output is under `json`. The bound is not a strict limit on the complete MCP wire message and does not limit provider work or in-memory response construction. The fixed envelope contains no user-provided strings. Clipboard images instead use lossless MCP image content and the separate byte cap described above; clients should expose that image content for direct analysis or mediate a subsequent analysis call rather than expect a data URI.
 
 The setup scripts securely merge the local MCP command into supported client configuration while preserving unrelated fields. The Gemini key is supplied to JSON clients through the MCP server environment rather than the command arguments.
+
+## CLI and Daemon
+
+The `vision-skills` binary is available after build or install:
+
+```
+vision-skills analyze <image> [--mode basic|standard|advanced|full] [--json]
+vision-skills serve                              # foreground REST server
+vision-skills daemon start [--port 8000]         # background REST server
+vision-skills daemon stop
+vision-skills daemon status
+vision-skills daemon autostart enable|disable    # launch at login
+cat image.png | vision-skills analyze
+```
+
+The daemon runs the REST server hidden in the background on `127.0.0.1` by default, writes its PID, port, and logs under `~/.vision-skills`, and stops its whole process tree on `daemon stop`. `autostart enable` registers a hidden launch at login: a VBS launcher with an `HKCU\...\Run` registry key on Windows, an XDG autostart entry on Linux, and a LaunchAgent on macOS. Clients can then reach the daemon's REST API instead of spawning per-session processes, and its warm cache survives across sessions.
 
 ## REST Server
 
