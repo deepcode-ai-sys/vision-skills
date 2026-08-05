@@ -6,7 +6,7 @@ Reported metrics are character error rate (CER), word error rate (WER), category
 
 `manifest.json` and `manifest.schema.json` define this small tranche. The fixture contains generated metadata, not a user image. Canonical benchmark boxes use `[x1, y1, x2, y2]` pixel arrays; final public responses serialize `BoundingBox` values as objects.
 
-The package does not publish nonfunctional local/live scripts. A meaningful external runner must provide representative images, independently prepared expected data, endpoint credentials, provider/model and environment versions, warmup policy, and repeated latency measurements.
+The package does not include nonfunctional local/live scripts. A meaningful external runner must provide representative images, independently prepared expected data, endpoint credentials, provider/model and environment versions, warmup policy, and repeated latency measurements.
 
 No mock result supports a claim about Gemini, PaddleOCR, Docling, OmniParser, OpenAI-compatible VLM, route quality, or production accuracy. Publish live specialist numbers only when they come from a reproducible live profile, never from parser fixtures or this mock profile.
 

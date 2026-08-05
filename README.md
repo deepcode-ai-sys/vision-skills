@@ -1,6 +1,5 @@
 # vision-skills
 
-![npm version](https://img.shields.io/npm/v/vision-skills)
 ![CI](https://github.com/deepcode-ai-sys/vision-skills/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/github/license/deepcode-ai-sys/vision-skills)
 ![Node](https://img.shields.io/badge/node-%3E%3D20.18-green)
@@ -28,12 +27,6 @@ git clone https://github.com/deepcode-ai-sys/vision-skills.git
 ```
 
 Restart the configured client afterward. Keep the clone in place because client configuration points to its local MCP entry file.
-
-The npm registry install below will be available only after `vision-skills` is published:
-
-```bash
-npm install vision-skills
-```
 
 Requirements:
 
@@ -341,13 +334,13 @@ npm run benchmark:mock
 
 The mock profile is a deterministic pipeline smoke check. It generates an image, starts a loopback canonical-v1 HTTP provider, and invokes the public SDK routing, adapter, composition, and response packaging before deriving metrics from the actual result. Box matching is category-aware (`ocr`, `object`, or `ui`), so overlapping boxes from different categories cannot match. Perfect scores validate this plumbing only; they do not measure Gemini, PaddleOCR, Docling, OmniParser, a local VLM, or real-image accuracy.
 
-No generic local/live scripts are published because the package cannot supply representative external services, credentials, or independently prepared expected data. Add a project-specific runner with recorded provider/model versions, warmup policy, and repeated latency measurements before making a live accuracy claim.
+No generic local/live benchmark runners are included because the package cannot supply representative external services, credentials, or independently prepared expected data. Add a project-specific runner with recorded provider/model versions, warmup policy, and repeated latency measurements before making a live accuracy claim.
 
 See `benchmark/README.md` for metric definitions and profile semantics.
 
 ## Production Audit Status
 
-The current package includes automated tests for schema validation, specialist fallback/composition, MCP protocol behavior, output bounds, URL blocking, REST authentication, CORS preflight, remote path rejection, concurrency, and cancellation/timeouts. CI covers Node 20.18, 22, and 24 and performs type checking, linting, build, tests, the deterministic mock benchmark, package dry-run validation, and installed-tarball import/binary/benchmark smoke tests.
+The current package includes automated tests for schema validation, specialist fallback/composition, MCP protocol behavior, output bounds, URL blocking, REST authentication, CORS preflight, remote path rejection, concurrency, and cancellation/timeouts. CI covers Node 20.18, 22, and 24 and performs type checking, linting, build, tests, the deterministic mock benchmark, and installed-tarball import/binary/benchmark smoke tests.
 
 This is not a claim of full production readiness. There has been no documented independent security audit or penetration test, no committed live-provider accuracy evaluation, and no production SLO/load or failover certification. Before deployment, validate chosen providers and models on representative data, review privacy/retention requirements, constrain egress and URL inputs, use a shared cache deliberately, terminate TLS, add infrastructure rate limits/observability, and test cancellation and failure behavior under load.
 
@@ -360,7 +353,7 @@ npm run lint
 npm run build
 npm test
 npm run benchmark:mock
-npm pack --dry-run
+npm run test:package
 ```
 
 Version `0.1.0` remains the current package version while the next changes are tracked under `Unreleased` in `CHANGELOG.md`.

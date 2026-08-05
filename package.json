@@ -51,8 +51,7 @@
     "benchmark": "npm run benchmark:mock",
     "benchmark:mock": "npm run build && node benchmark/run.mjs mock",
     "test:package": "node scripts/package-smoke.mjs",
-    "serve": "node dist/server/start.js",
-    "prepublishOnly": "npm run build"
+    "serve": "node dist/server/start.js"
   },
   "keywords": [
     "vision",

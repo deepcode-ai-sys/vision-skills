@@ -15,7 +15,7 @@ npm run lint
 npm run build
 npm test
 npm run benchmark:mock
-npm pack --dry-run
+npm run test:package
 ```
 
 CI runs these checks on Node 20.18, 22, and 24. Tests and the mock benchmark must not require live provider credentials.
